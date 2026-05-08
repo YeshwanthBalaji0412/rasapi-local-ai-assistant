@@ -208,6 +208,96 @@ python -m pytest tests/ -v
 
 ---
 
+## Phase 3 — local memory, notes, tasks screenshots
+
+These show RasaPi remembering things across requests, with sensitive-data protection. Capture them with the Phase 3 build running and a clean DB.
+
+### P3-1. Save a memory
+**File:** `docs/images/p3-01-save-memory.png`
+**Why it matters:** Demonstrates persistent local memory.
+
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"remember that my portfolio domain is yeshwanthbalaji.com"}' | python3 -m json.tool
+```
+
+**Expected:** `intent: "save_memory"`, response contains "Saved to local memory."
+
+### P3-2. List memory
+**File:** `docs/images/p3-02-list-memory.png`
+**Why it matters:** Confirms the data is persisted between requests.
+
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"what do you remember"}' | python3 -m json.tool
+```
+
+**Expected:** `intent: "list_memory"`, response includes "yeshwanthbalaji.com".
+
+### P3-3. Sensitive-data block
+**File:** `docs/images/p3-03-sensitive-blocked.png`
+**Why it matters:** **The Phase 3 linchpin screenshot.** Shows that obvious secrets are refused before they touch the disk.
+
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"remember that my password is hunter2"}' | python3 -m json.tool
+```
+
+**Expected:** response contains *"I can't save sensitive information…"*. A `tail -n 1 logs/audit-*.jsonl` should show `event_type: "sensitive_memory_blocked"`, `reason: "password"`. Capture both side by side.
+
+### P3-4. Add a task
+**File:** `docs/images/p3-04-add-task.png`
+**Why it matters:** End-to-end task creation through the conversational path.
+
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"add task ship Phase 3"}' | python3 -m json.tool
+```
+
+### P3-5. Complete a task
+**File:** `docs/images/p3-05-complete-task.png`
+
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"mark task 1 as done"}' | python3 -m json.tool
+
+curl -s http://localhost:8000/tasks | python3 -m json.tool   # shows it gone from open list
+curl -s "http://localhost:8000/tasks?include_done=true" | python3 -m json.tool   # shows it with status=done
+```
+
+### P3-6. List notes
+**File:** `docs/images/p3-06-list-notes.png`
+
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"save note buy a USB microphone for the Pi"}' | python3 -m json.tool
+
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"show notes"}' | python3 -m json.tool
+```
+
+### P3-7. Audit log shows a memory event
+**File:** `docs/images/p3-07-audit-memory.png`
+**Why it matters:** Every storage operation is recorded in the same JSONL trail as Phase 1/2 events.
+
+```bash
+tail -n 5 logs/audit-*.jsonl
+```
+
+**Expected:** lines with `event_type` values like `memory_created`, `task_completed`, and (if you ran P3-3) `sensitive_memory_blocked`.
+
+### P3-8. Updated test suite (77/77)
+**File:** `docs/images/p3-08-tests-77.png`
+
+```bash
+cd backend && source .venv/bin/activate && cd ..
+python -m pytest tests/ -v
+```
+
+**Expected:** Final line `======= 77 passed in <time> =======`.
+
+---
+
 ## Optional bonus screenshots
 
 These aren't required but strengthen the story:

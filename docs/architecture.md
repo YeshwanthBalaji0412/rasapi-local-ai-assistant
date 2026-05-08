@@ -1,6 +1,6 @@
 # RasaPi — Architecture
 
-This document describes the architecture as it exists in code today (Phase 1 complete + Phase 2 in progress). Future phases will extend specific modules without changing existing interfaces.
+This document describes the architecture as it exists in code today (Phases 1 and 2 complete; Phase 3 in progress). Future phases will extend specific modules without changing existing interfaces.
 
 ---
 
@@ -27,6 +27,8 @@ This document describes the architecture as it exists in code today (Phase 1 com
                             │  │  intent_router.py  (keyword → intent)  │  │
                             │  │  command_runner.py (subprocess)        │  │
                             │  │  local_llm.py      (Ollama HTTP)  ──┐  │  │
+                            │  │  memory.py         (memory+notes)──┼──┼──┐
+                            │  │  tasks.py          (tasks)         │  │  │
                             │  └──────────────┬──────────────────────┼──┘  │
                             │                 │                      │     │
                             │                 │            ┌─────────▼──┐  │
@@ -34,6 +36,12 @@ This document describes the architecture as it exists in code today (Phase 1 com
                             │                 │            │  :11434    │  │
                             │                 │            │  (local)   │  │
                             │                 │            └────────────┘  │
+                            │                 │                            │
+                            │  ┌──────────────▼──────────────────────────┐ │
+                            │  │            storage/                     │ │
+                            │  │  database.py + schema.py                │ │
+                            │  │  → backend/data/rasapi.db (SQLite)      │ │
+                            │  └─────────────────────────────────────────┘ │
                             │                 │                            │
                             │  ┌──────────────▼─────────────────────────┐  │
                             │  │            security/                   │  │
@@ -101,7 +109,34 @@ The whole stack is one Python process. No daemons, no message queue, no DB in Ph
   Client  ◄── 200 OK with JSON
 ```
 
-Every step has an audit hook. Every executable path is gated. The LLM branch returns plain text; **there is no path from the LLM response back to the command runner**.
+Every step has an audit hook. Every executable path is gated. The LLM branch returns plain text; **there is no path from the LLM response back to the command runner or to the memory store**.
+
+### Phase 3 — memory / notes / tasks branches
+
+When the router matches one of `save_memory`, `list_memory`, `save_note`, `list_notes`, `add_task`, `list_tasks`, or `complete_task`, dispatch goes to a handler in `core/memory.py` or `core/tasks.py`:
+
+```
+   matched memory/task intent
+            │
+            ▼
+   core/memory.py  (or core/tasks.py)
+            │
+            │  1. (writes only) sensitive_data.is_sensitive(value)
+            │       → blocked: audit (sensitive_memory_blocked) → reject
+            │
+            │  2. parameterized SQL via storage.database.db_session()
+            │       → INSERT / SELECT / UPDATE on backend/data/rasapi.db
+            │
+            │  3. audit_logger.log_storage_event(event_type, item_type, item_id)
+            │
+            ▼
+   formatted text returned to assistant route
+            │
+            ▼
+   client receives JSON
+```
+
+Direct REST endpoints (`POST /memory`, `POST /tasks`, …) skip the router and call the same service functions directly. The sensitive-data check and audit log fire in both surfaces because they live in the service layer.
 
 ---
 
@@ -229,9 +264,16 @@ If any layer rejects, the audit log records `outcome="rejected"` (or `"error"`) 
 | `backend/config.py` | Type-safe settings from `.env` | pydantic-settings |
 | `api/routes/health.py` | `GET /health` — liveness, version | config |
 | `api/routes/assistant.py` | `POST /ask`, `GET /commands`, LLM fallback dispatch | intent_router, local_llm, audit_log |
-| `core/intent_router.py` | Keyword matching, intent dispatch | command_runner |
+| `api/routes/memory.py` | `POST/GET /memory`, `POST/GET /notes` | core/memory |
+| `api/routes/tasks.py` | `POST/GET /tasks`, `PATCH /tasks/{id}/complete` | core/tasks |
+| `core/intent_router.py` | Keyword matching, intent dispatch | command_runner, memory, tasks |
 | `core/command_runner.py` | Validated subprocess execution | allowlist, audit_log |
 | `core/local_llm.py` | Ollama HTTP client; conversational text only | config, httpx |
+| `core/memory.py` | Memory + notes service (SQLite I/O, sensitive-data check) | storage, security/sensitive_data, audit_log |
+| `core/tasks.py` | Tasks service (CRUD on `tasks` table) | storage, audit_log |
+| `storage/database.py` | `db_session()` context manager, `init_db()` | config, schema |
+| `storage/schema.py` | `CREATE TABLE` statements | — |
+| `security/sensitive_data.py` | Regex + keyword detector for secrets | — |
 | `security/allowlist.py` | Default-deny command whitelist | — |
 | `security/audit_log.py` | Append-only JSONL event sink | config |
 

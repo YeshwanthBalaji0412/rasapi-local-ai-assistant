@@ -22,6 +22,10 @@ RasaPi runs on a home network and accepts natural-language input that, by design
 | **LLM tool escalation** | Model output interpreted as a command | `core/local_llm.py` does not import `command_runner`, `allowlist`, or `subprocess`. Output is opaque text. Structural test enforces this in CI. See "LLM cannot execute tools" below. |
 | **Prompt-prompt injection via LLM output** | Crafted query causes LLM to emit shell-like text that we then parse | We never parse LLM output for actions. It is a string field in the response. |
 | **System-prompt override** | User input attempts to redefine the assistant's role | System prompt is hard-coded in source; user input only fills the `user` message. |
+| **Sensitive data persisted to local store (Phase 3)** | User says "remember that my password is …" | `security/sensitive_data.is_sensitive` checks every memory/note write; matches are rejected with a static safe message and audited as `sensitive_memory_blocked`. |
+| **LLM writing to memory store (Phase 3)** | Model output interpreted as a memory write | `core/local_llm.py` does not import `core/memory.py` or `core/tasks.py`. Memory writes only happen via the deterministic router or direct REST. Tested in `test_phase3_routing.py::test_llm_response_does_not_create_memory`. |
+| **SQL injection via memory value** | User crafts SQL-like value | All writes use parameterized queries (`?` placeholders). Tested in `test_save_memory_uses_parameterized_sql` — a literal `'; DROP TABLE …; --` survives a round-trip and the table remains intact. |
+| **Memory leakage to LLM** | List operation results passed back to the model | List results are returned to the user, never re-injected into a prompt. The LLM module receives only the user's current query. |
 
 ---
 
@@ -239,6 +243,65 @@ A future cloud phase, if ever added, will be a deliberate design decision behind
 
 ---
 
+## Local memory, notes, and tasks (Phase 3)
+
+Phase 3 adds persistent local storage. Two security properties are enforced by code, not just policy.
+
+### 1. Memory and tasks are local-only
+
+- Database file: `backend/data/rasapi.db` (SQLite). Path is gitignored.
+- No code path writes memory data to a network socket. Verified by inspection: `core/memory.py` and `core/tasks.py` import only `storage`, `security`, and stdlib.
+- The LLM module (`core/local_llm.py`) does not import the storage modules.
+
+### 2. The LLM cannot write to the store
+
+```
+        deterministic router  ─────────┐
+                                       │
+                                       ▼
+   user query  ──►  intent matched  ──► core.memory  /  core.tasks  ──► SQLite
+                                                            ▲
+                                       direct REST ─────────┘
+                                       (Pydantic-validated)
+
+   LLM (Phase 2)  ───────────────────►  text response only.
+                                       NO arrow into core.memory or core.tasks.
+```
+
+The structural guarantee is that `core/local_llm.py` does not import `core/memory.py` or `core/tasks.py`. There is no in-process bridge from the LLM's string output to the storage layer. Tested by `test_llm_response_does_not_create_memory` and `test_llm_response_does_not_create_tasks`: even when the LLM returns text like *"Saved! I'll remember that"*, the row count in `memory_items` remains zero.
+
+### 3. Sensitive-data detection (best-effort, not perfect)
+
+`security/sensitive_data.py` runs on every memory and note write — both `/ask` and direct REST paths. It blocks:
+
+| Pattern | Caught by |
+|---|---|
+| `my password is …`, `password:` | phrase match |
+| `api key is …`, `api_key=…` | phrase match + regex (`sk-…`, `ghp_…`, `xoxb-…`, `AKIA…`) |
+| `bearer token`, `secret token` | phrase match |
+| `-----BEGIN PRIVATE KEY-----` | phrase match |
+| US SSN `123-45-6789` | regex |
+| Credit-card-shaped 13–19 digit run | regex (loose, no Luhn) |
+| `passport number` phrase | phrase match |
+| JWT-shaped tokens | regex |
+
+**This is a practical safety layer, not a DLP product.** Documented in the source file. False negatives are accepted; false positives prefer to over-block. The operator should not deliberately tell RasaPi a secret expecting the detector to handle it.
+
+When the detector matches:
+- The write is rejected.
+- The user receives a static safe message: *"I can't save sensitive information like passwords, API keys, tokens, or financial identifiers."*
+- An audit event is logged with `event_type="sensitive_memory_blocked"` and the **pattern name**, never the matched content.
+
+### 4. SQL injection
+
+All write paths use parameterized queries (`conn.execute(sql, (...))`). A regression test inserts `'; DROP TABLE memory_items; --` as a value, then verifies the value round-trips and the table still exists.
+
+### 5. File permissions (out of scope for Phase 3)
+
+Phase 3 does not enforce a specific filesystem mode on `backend/data/rasapi.db`. The file inherits the umask of the user running the server. Phase 5 deployment will set `chmod 600` on the data directory and document the expected ownership.
+
+---
+
 ## Audit logging behaviour
 
 Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD.jsonl`. Files rotate daily. Entries are append-only and never modified after writing.
@@ -251,6 +314,10 @@ Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD
 | `command_exec` | A command completes (success / error) | `timestamp`, `request_id`, `command`, `args`, `outcome`, `duration_ms` |
 | `command_exec` (rejected) | Allowlist validator rejects | as above with `outcome="rejected"`, `reason` |
 | `llm_call` | Ollama call completes (success or failure) | `timestamp`, `request_id`, `model`, `outcome` (`success`/`error`), `duration_ms`, `reason` (on error only) |
+| `memory_created` / `note_created` / `task_created` | A row was inserted | `timestamp`, `request_id`, `event_type`, `item_type`, `item_id`, `outcome="success"` |
+| `memory_listed` / `note_listed` / `task_listed` | A list query was served | `timestamp`, `request_id`, `event_type`, `item_type` |
+| `task_completed` | A task was marked done (or attempt) | as above with `item_id`, `outcome` (`success`/`noop`/`error`), `reason` (`already_done`/`not_found`) |
+| `sensitive_memory_blocked` | A memory or note write was rejected | `timestamp`, `request_id`, `item_type`, `outcome="blocked"`, `reason` (pattern name, not content) |
 
 ### Example entry
 
@@ -283,6 +350,6 @@ Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD
 | Audit log | Local filesystem (`logs/`) | No |
 | Config / secrets | `.env` (gitignored) | No |
 | LLM model weights (Phase 2) | Local filesystem (`models/`) | No |
-| User reminders (Phase 3) | Local SQLite | No |
+| User memory, notes, tasks (Phase 3) | Local SQLite at `backend/data/rasapi.db` | No |
 
 No data leaves the Pi unless a future phase explicitly opts the user in to a cloud feature. Phase 1 has no networked egress code paths.

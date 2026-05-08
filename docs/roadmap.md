@@ -37,7 +37,7 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🟡 Phase 2 — Local LLM Fallback (in progress)
+## ✅ Phase 2 — Local LLM Fallback (complete)
 
 **Goal:** Add a conversational fallback for queries that the deterministic router cannot match — fully local, fully opt-in, zero cloud calls.
 
@@ -65,21 +65,37 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🔮 Phase 3 — Memory & Persistent Storage
+## 🟡 Phase 3 — Local Memory, Notes, and Tasks (in progress)
 
-**Goal:** Give the assistant a memory across sessions — reminders, preferences, conversation history.
+**Goal:** Give the assistant a memory across sessions — locally-stored memory items, free-form notes, and a tasks list.
 
-**Planned:**
+**Delivered:**
 
-- [ ] SQLite database (`data/rasapi.db`) — local only
-- [ ] Schema: `reminders`, `preferences`, `conversation_log`
-- [ ] New endpoints: `POST /reminders`, `GET /reminders`, `DELETE /reminders/{id}`
-- [ ] Conversation context: last N turns passed to the LLM as memory
-- [ ] User-scoped data (single-user Phase 3, multi-user Phase 5+)
-- [ ] Encryption-at-rest option using `SQLCipher` (off by default, `.env` flag)
-- [ ] CLI tool to export/wipe local data
+- [x] SQLite database at `backend/data/rasapi.db` (gitignored)
+- [x] Three tables: `memory_items`, `notes`, `tasks` (idempotent `CREATE TABLE IF NOT EXISTS`)
+- [x] Service layer in `core/memory.py` and `core/tasks.py` (no LLM, no subprocess)
+- [x] Conversational `/ask` intents: `save_memory`, `list_memory`, `save_note`, `list_notes`, `add_task`, `list_tasks`, `complete_task`
+- [x] Direct REST endpoints: `POST/GET /memory`, `POST/GET /notes`, `POST/GET /tasks`, `PATCH /tasks/{id}/complete`
+- [x] Sensitive-data detector (`security/sensitive_data.py`) blocks passwords, API keys, JWTs, SSNs, credit-card-shaped numbers, private keys
+- [x] Audit log extended with 8 new `storage_event` types
+- [x] Phase 1 `memory` intent renamed to `memory_usage` to free the keyword space
+- [x] Per-test isolated SQLite via `conftest.py` autouse fixture
+- [x] **77 tests passing**, including SQL injection regression and structural import checks
 
-**Privacy invariant:** memory never leaves the device. Wipe is a single `rm -f data/rasapi.db`.
+**Security invariants maintained:**
+
+- Router still runs first; memory intents short-circuit before any LLM dispatch.
+- LLM cannot create memory, notes, or tasks. Verified by `test_llm_response_does_not_create_memory`.
+- Memory operations cannot invoke `command_runner.run_command`. Verified by mock-and-fail tests.
+- Sensitive content is rejected with a static message; the matched pattern (not content) is audited.
+
+**Still to do (optional polish):**
+
+- [ ] `DELETE /memory/{id}`, `DELETE /notes/{id}` (Phase 3 spec called these out as "explicit endpoint with confirmation"; deferred until needed)
+- [ ] Archiving endpoint (currently `archived` column exists but no UI to flip it)
+- [ ] CLI tool to export or wipe local data
+
+**Privacy invariant:** memory never leaves the device. Wipe is a single `rm -f backend/data/rasapi.db`.
 
 ---
 
