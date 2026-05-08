@@ -22,6 +22,8 @@ class Settings(BaseSettings):
 
     api_secret_key: str = "change-me-before-use"
 
+    database_path: str = "backend/data/rasapi.db"
+
     audit_log_dir: str = "logs"
     log_level: str = "INFO"
 

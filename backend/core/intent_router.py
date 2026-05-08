@@ -1,24 +1,31 @@
 """
-Deterministic intent router (Phase 1).
+Deterministic intent router (Phase 1, extended in Phase 3).
 
 Maps a natural-language query to a known intent using simple keyword
-matching. Each intent maps to either:
+matching. Each intent maps to exactly one of:
   - a safe allowlisted command, executed via command_runner, or
-  - a built-in handler (e.g. greeting), which returns a static string.
+  - a built-in handler that takes (query, request_id) and returns text.
 
-This is intentionally NOT an LLM. Phase 2 will add an LLM layer that
-proposes an intent and falls back to this router when uncertain.
+This is intentionally NOT an LLM. The LLM (Phase 2) only runs when the
+router returns 'fallback' AND the operator has opted in.
 
-Why keyword-based for Phase 1:
+Why keyword-based:
   - Fully deterministic, easy to audit, no model dependency
   - Demonstrates the security boundary in isolation
-  - Works on a Pi with no model loaded
+  - Memory writes go through this same path, so they remain explainable
+    and never depend on a probabilistic model
 """
 
 from dataclasses import dataclass
 from typing import Callable
 
+from core import memory, tasks
 from core.command_runner import run_command
+
+
+# Handler signature: takes the original query and request_id, returns
+# user-facing text. Greeting/help handlers ignore both args.
+HandlerFn = Callable[[str, str], str]
 
 
 @dataclass(frozen=True)
@@ -26,16 +33,18 @@ class Intent:
     name: str
     description: str
     keywords: tuple[str, ...]
-    # Either a (command, args) tuple to execute, or a builtin handler
     command: tuple[str, list[str]] | None = None
-    handler: Callable[[], str] | None = None
+    handler: HandlerFn | None = None
 
 
-def _greeting() -> str:
-    return "Hello. I'm RasaPi, your local AI assistant. Ask me about system status, time, or device info."
+def _greeting(_query: str, _request_id: str) -> str:
+    return (
+        "Hello. I'm RasaPi, your local AI assistant. Ask me about system "
+        "status, save a memory, take a note, or manage tasks."
+    )
 
 
-def _help() -> str:
+def _help(_query: str, _request_id: str) -> str:
     lines = ["I can help with:"]
     for intent in INTENTS:
         if intent.name == "fallback":
@@ -44,7 +53,72 @@ def _help() -> str:
     return "\n".join(lines)
 
 
+# Order matters: the first intent whose keyword appears in the query wins.
+# Memory/notes/tasks intents are listed before broader ones so phrases like
+# "show memory" reach list_memory before any system-info intent.
 INTENTS: tuple[Intent, ...] = (
+    # ── Phase 3 — local memory ───────────────────────────────────────────
+    Intent(
+        name="save_memory",
+        description="Remember something for later (\"remember that ...\")",
+        keywords=(
+            "remember that ",
+            "remember to remember that ",
+            "please remember that ",
+            "remember ",
+        ),
+        handler=memory.save_memory_from_query,
+    ),
+    Intent(
+        name="list_memory",
+        description="List things you've asked me to remember",
+        keywords=(
+            "what do you remember",
+            "what did i ask you to remember",
+            "show memory",
+            "list memory",
+            "what do i remember",
+        ),
+        handler=memory.list_memory_text,
+    ),
+    # ── Phase 3 — notes ──────────────────────────────────────────────────
+    Intent(
+        name="save_note",
+        description="Save a note (\"save note ...\", \"add note ...\")",
+        keywords=("save note ", "take a note ", "note: ", "add note "),
+        handler=memory.save_note_from_query,
+    ),
+    Intent(
+        name="list_notes",
+        description="Show your notes",
+        keywords=("show notes", "list notes", "my notes"),
+        handler=memory.list_notes_text,
+    ),
+    # ── Phase 3 — tasks ──────────────────────────────────────────────────
+    Intent(
+        name="complete_task",
+        description="Mark a task as done (\"mark task 1 as done\")",
+        keywords=(
+            "mark task ",
+            "complete task ",
+            "finish task ",
+            "task done",
+        ),
+        handler=tasks.complete_task_from_query,
+    ),
+    Intent(
+        name="add_task",
+        description="Add a task (\"add task ...\")",
+        keywords=("add task ", "new task ", "create task ", "task: "),
+        handler=tasks.add_task_from_query,
+    ),
+    Intent(
+        name="list_tasks",
+        description="Show your open tasks",
+        keywords=("show tasks", "list tasks", "my tasks", "open tasks"),
+        handler=tasks.list_tasks_text,
+    ),
+    # ── Phase 1 — system info ────────────────────────────────────────────
     Intent(
         name="time",
         description="Tell the current date and time",
@@ -70,9 +144,9 @@ INTENTS: tuple[Intent, ...] = (
         command=("df", ["-h"]),
     ),
     Intent(
-        name="memory",
-        description="Report memory usage",
-        keywords=("memory", "ram", "free memory"),
+        name="memory_usage",
+        description="Report system RAM usage",
+        keywords=("ram", "free memory", "memory usage", "free ram"),
         command=("free", ["-h"]),
     ),
     Intent(
@@ -87,6 +161,7 @@ INTENTS: tuple[Intent, ...] = (
         keywords=("system info", "kernel", "os version", "uname"),
         command=("uname", ["-a"]),
     ),
+    # ── Phase 1 — built-ins ──────────────────────────────────────────────
     Intent(
         name="greeting",
         description="Greet the assistant",
@@ -109,12 +184,17 @@ class RouteResult:
 
 
 def route(query: str, request_id: str) -> RouteResult:
-    q = query.lower().strip()
+    # Pad with a trailing space so keywords ending in " " (e.g. "remember ")
+    # still match when the user typed exactly that prefix with no payload.
+    q = query.lower().strip() + " "
 
     for intent in INTENTS:
         if any(kw in q for kw in intent.keywords):
             if intent.handler is not None:
-                return RouteResult(intent=intent.name, response=intent.handler())
+                return RouteResult(
+                    intent=intent.name,
+                    response=intent.handler(query, request_id),
+                )
             assert intent.command is not None
             cmd, args = intent.command
             output = run_command(request_id=request_id, command=cmd, args=args)

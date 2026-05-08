@@ -3,8 +3,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from api.routes import assistant, health, memory, tasks
 from config import settings
-from api.routes import health, assistant
+from storage.database import init_db
 
 
 logging.basicConfig(
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting %s on %s:%s", settings.assistant_name, settings.host, settings.port)
+    init_db()
     yield
     logger.info("Shutting down %s", settings.assistant_name)
 
@@ -24,7 +26,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.assistant_name,
     description="Local-first secure AI assistant on Raspberry Pi 5",
-    version="0.1.0",
+    version="0.3.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url=None,
@@ -32,3 +34,5 @@ app = FastAPI(
 
 app.include_router(health.router)
 app.include_router(assistant.router)
+app.include_router(memory.router)
+app.include_router(tasks.router)

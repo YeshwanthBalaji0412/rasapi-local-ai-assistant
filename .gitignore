@@ -222,3 +222,11 @@ logs/
 models/
 *.jsonl
 .env
+
+# Local SQLite database (Phase 3) — keep the directory but never the data
+backend/data/*
+!backend/data/.gitkeep
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

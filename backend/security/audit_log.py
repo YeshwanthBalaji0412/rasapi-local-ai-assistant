@@ -93,4 +93,34 @@ class AuditLogger:
         _write(entry)
 
 
+    def log_storage_event(
+        self,
+        *,
+        request_id: str,
+        event_type: str,
+        item_type: str,
+        item_id: int | None = None,
+        outcome: str = "success",
+        reason: str | None = None,
+    ) -> None:
+        """
+        Records a memory / note / task event. event_type is one of:
+          memory_created, memory_listed, note_created, note_listed,
+          task_created, task_listed, task_completed,
+          sensitive_memory_blocked.
+        """
+        entry: dict = {
+            "timestamp": _now_iso(),
+            "event_type": event_type,
+            "request_id": request_id,
+            "item_type": item_type,
+            "outcome": outcome,
+        }
+        if item_id is not None:
+            entry["item_id"] = item_id
+        if reason:
+            entry["reason"] = reason
+        _write(entry)
+
+
 audit_logger = AuditLogger()
