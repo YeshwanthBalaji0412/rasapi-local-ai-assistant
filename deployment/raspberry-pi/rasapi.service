@@ -1,0 +1,43 @@
+[Unit]
+Description=RasaPi — local-first secure AI assistant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Replace <PI_USER> with your unprivileged Linux user (e.g. "pi" or your
+# own login name). Do NOT run RasaPi as root.
+User=<PI_USER>
+Group=<PI_USER>
+
+WorkingDirectory=/home/<PI_USER>/rasapi-local-ai-assistant/backend
+
+# Default: bind to 127.0.0.1 (Pi-local only — safest).
+ExecStart=/home/<PI_USER>/rasapi-local-ai-assistant/backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+
+# ── Trusted-LAN alternative ───────────────────────────────────────────────────
+# To reach the dashboard from another device on your home network (e.g. a
+# MacBook), comment the line above and uncomment the line below.
+#
+# WARNING: Only use this on a trusted home network. Do NOT port-forward
+# port 8000 to the public internet. There is no authentication in Phase 6.
+#
+#ExecStart=/home/<PI_USER>/rasapi-local-ai-assistant/backend/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+# ─────────────────────────────────────────────────────────────────────────────
+
+Restart=on-failure
+RestartSec=5
+
+# Modest sandboxing — no downside, helps avoid surprises.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+# Allow writing to the project directory (DB, logs).
+ReadWritePaths=/home/<PI_USER>/rasapi-local-ai-assistant
+
+# Logs go to journalctl. Inspect with:  journalctl -u rasapi -f
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
