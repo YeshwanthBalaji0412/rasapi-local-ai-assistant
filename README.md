@@ -1,6 +1,6 @@
 # RasaPi — Local-First Secure AI Assistant on Raspberry Pi 5
 
-[![Phase](https://img.shields.io/badge/phase-5%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-154%2F154-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![Phase](https://img.shields.io/badge/phase-6%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-185%2F185-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 A privacy-preserving AI assistant that runs entirely on a Raspberry Pi 5. No cloud dependency. Secure command execution by default. Built iteratively, phase by phase, so every increment is testable on its own.
 
@@ -36,7 +36,8 @@ This repo is also a recruiter-facing showcase of how to build a **secure** AI sy
 | 2 | ✅ complete | Optional Ollama LLM fallback for free-form queries (off by default) |
 | 3 | ✅ complete | Local SQLite memory, notes, and tasks with sensitive-data blocking |
 | 4 | ✅ complete | Daily intelligence briefing — RSS + Open-Meteo, all local, no API keys |
-| 5 | 🟡 in progress | Local web dashboard — server-rendered HTML, no JS framework, no CDN |
+| 5 | ✅ complete | Local web dashboard — server-rendered HTML, no JS framework, no CDN |
+| 6 | 🟡 in progress | Raspberry Pi deployment — systemd service, install / smoke / backup / restore scripts |
 
 The deterministic intent router is still the only thing that decides what code path runs. The LLM is text-only. Memory writes go through the router or direct REST endpoints — never the LLM.
 
@@ -49,7 +50,7 @@ The deterministic intent router is still the only thing that decides what code p
 - Safe command execution gated by an allowlist with typed argument validation
 - Structured JSONL audit trail for every request, command, LLM call, and memory event
 - `.env`-based configuration via `pydantic-settings`
-- Full test suite — **154/154 passing** (`pytest`)
+- Full test suite — **185/185 passing** (`pytest`)
 
 **Phase 2 additions (opt-in via `ENABLE_LOCAL_LLM=true`):**
 
@@ -385,7 +386,7 @@ cd backend && source .venv/bin/activate
 cd .. && python -m pytest tests/ -v
 ```
 
-Expected: `154 passed`.
+Expected: `185 passed`.
 
 ---
 
@@ -460,6 +461,37 @@ rasapi-local-ai-assistant/
 
 ---
 
+## Deploying to a Raspberry Pi 5 (Phase 6)
+
+Phase 6 ships a turn-key deployment to a Raspberry Pi. The same backend that runs on your MacBook in development runs unchanged on the Pi as a non-root systemd service. No application code changes are needed.
+
+```bash
+# On the Pi (after SSH-ing in):
+git clone https://github.com/YeshwanthBalaji0412/rasapi-local-ai-assistant.git
+cd rasapi-local-ai-assistant
+bash deployment/raspberry-pi/install.sh    # creates venv, installs deps, seeds .env
+chmod 600 .env
+
+# Try a manual run first
+cd backend && source .venv/bin/activate
+uvicorn main:app --host 127.0.0.1 --port 8000
+
+# Then the smoke test
+bash deployment/raspberry-pi/smoke-test.sh
+
+# Install as a systemd service
+sed "s|<PI_USER>|$USER|g" deployment/raspberry-pi/rasapi.service \
+  | sudo tee /etc/systemd/system/rasapi.service > /dev/null
+sudo systemctl daemon-reload && sudo systemctl enable --now rasapi
+sudo systemctl status rasapi
+```
+
+> ⚠️ **No public exposure.** Phase 6 has no authentication. The shipped systemd unit binds to `127.0.0.1` (Pi-local only). To reach the dashboard from your MacBook over the home LAN, switch one line to `--host 0.0.0.0` and only do this on a trusted network. Never port-forward to the public internet.
+
+Full guide, troubleshooting, backup/restore, and the optional Ollama appendix: [`deployment/raspberry-pi/setup-pi.md`](deployment/raspberry-pi/setup-pi.md). Cross-environment overview: [`docs/deployment.md`](docs/deployment.md).
+
+---
+
 ## Hardware target
 
 - Raspberry Pi 5 (8 GB recommended for Phase 2 LLM)
@@ -478,9 +510,10 @@ See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 - **Phase 2** ✅ Local LLM fallback via Ollama (opt-in)
 - **Phase 3** ✅ Local memory, notes, and tasks
 - **Phase 4** ✅ Daily intelligence briefing
-- **Phase 5** 🟡 Local web dashboard (in progress)
-- **Phase 6** — Voice input/output (Whisper + Piper, all local)
-- **Phase 7** — Raspberry Pi deployment hardening
+- **Phase 5** ✅ Local web dashboard
+- **Phase 6** 🟡 Raspberry Pi deployment (in progress) — see [docs/deployment.md](docs/deployment.md)
+- **Phase 7** — Voice input/output (Whisper + Piper, all local)
+- **Phase 8** — Authentication and remote-access hardening
 
 ---
 

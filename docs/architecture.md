@@ -1,6 +1,6 @@
 # RasaPi — Architecture
 
-This document describes the architecture as it exists in code today (Phases 1–4 complete; Phase 5 in progress). Future phases will extend specific modules without changing existing interfaces.
+This document describes the architecture as it exists in code today (Phases 1–5 complete; Phase 6 in progress). Future phases will extend specific modules without changing existing interfaces.
 
 ---
 
@@ -181,6 +181,48 @@ When the router matches one of the briefing intents (`daily_briefing`, `world_br
 ```
 
 REST endpoints (`/briefing/refresh`, `/briefing/daily`, `/briefing/category/{c}`, `/briefing/sources`) hit the same service functions directly.
+
+### Phase 6 — Deployment topology
+
+Phase 6 introduces a deployment story but does not change the application:
+
+```
+   ┌──────────────────┐  git push   ┌────────────────────────┐
+   │  MacBook (dev)   │ ──────────► │  GitHub                │
+   └──────────────────┘             │  rasapi-local-ai-…     │
+                                    └──────────┬─────────────┘
+                                               │ git clone
+                                               ▼
+   ┌─────────────────────────────────────────────────────────┐
+   │           Raspberry Pi 5 (Bookworm 64-bit)              │
+   │                                                         │
+   │   bash deployment/raspberry-pi/install.sh               │
+   │     → backend/.venv                                     │
+   │     → pip install -r backend/requirements.txt           │
+   │     → backend/data/  (mode 700)                         │
+   │     → logs/          (mode 700)                         │
+   │     → .env           (operator: chmod 600, never        │
+   │                       overwritten by install.sh)        │
+   │                                                         │
+   │   /etc/systemd/system/rasapi.service                    │
+   │     User=<PI_USER>   (NOT root)                         │
+   │     ExecStart=…/uvicorn main:app                         │
+   │       default: --host 127.0.0.1 (Pi-local only)         │
+   │       alt:     --host 0.0.0.0   (LAN, with warning)     │
+   │     Restart=on-failure                                  │
+   │     NoNewPrivileges, PrivateTmp, ProtectSystem=full     │
+   └────────────────────────┬────────────────────────────────┘
+                            │ http (LAN, no public port-forward)
+                            ▼
+                       MacBook browser
+                       http://<pi-ip>:8000/dashboard
+```
+
+The application binary, the SQLite store, and the audit log all live on
+the Pi. There is no inbound dependency on a network service beyond the
+public RSS hosts and Open-Meteo (Phase 4). The Pi can run for weeks
+unattended; the systemd service auto-restarts on failure and survives
+reboots.
 
 The briefing package's outbound network calls go to:
 - the public RSS hosts in `briefing/sources.py` (BBC, NPR, Hugging Face, Google AI Blog, Ars Technica, The Verge, Hacker News mirror, USCIS)
@@ -373,6 +415,10 @@ If any layer rejects, the audit log records `outcome="rejected"` (or `"error"`) 
 | `security/audit_reader.py` | Read-only JSONL parser; skips malformed lines; truncates long fields | config |
 | `templates/dashboard.html` | Single Jinja2 template with autoescape on | — |
 | `static/dashboard.css` | Local CSS, no CDN, no remote fonts | — |
+| `deployment/raspberry-pi/install.sh` | Idempotent Pi bootstrap. Aborts safely if system packages missing. | — |
+| `deployment/raspberry-pi/rasapi.service` | systemd unit. Non-root, default `127.0.0.1`, commented LAN-binding alternative. | — |
+| `deployment/raspberry-pi/smoke-test.sh` | 9-endpoint smoke check. `BASE_URL` configurable. | curl |
+| `deployment/raspberry-pi/backup.sh` / `restore.sh` | Local DB + audit-log snapshot/restore. Excludes `.env`. | — |
 | `security/allowlist.py` | Default-deny command whitelist | — |
 | `security/audit_log.py` | Append-only JSONL event sink | config |
 

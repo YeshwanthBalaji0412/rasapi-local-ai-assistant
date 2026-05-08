@@ -141,7 +141,7 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🟡 Phase 5 — Local Web Dashboard (in progress)
+## ✅ Phase 5 — Local Web Dashboard (complete)
 
 **Goal:** Make the project recruiter-showcase ready with a clean, local-only web dashboard at `/dashboard`. Server-rendered HTML, no JavaScript framework, no CDN.
 
@@ -170,14 +170,49 @@ No new features in this phase — only documentation and minor polish.
 
 **Reserved for later phases:**
 
-- [ ] Authentication / sessions (Phase 7 deployment)
-- [ ] HTTPS / TLS termination (Phase 7)
-- [ ] CSRF tokens (Phase 7)
+- [ ] Authentication / sessions (Phase 8)
+- [ ] HTTPS / TLS termination (Phase 8)
+- [ ] CSRF tokens (Phase 8)
 - [ ] Editing memory / notes from the dashboard (deferred — not security-justified yet)
 
 ---
 
-## 🔮 Phase 6 — Voice I/O
+## 🟡 Phase 6 — Raspberry Pi Deployment (in progress)
+
+**Goal:** Deploy the existing backend + dashboard to a Raspberry Pi 5 as an always-on local-first service. No application code changes.
+
+**Delivered:**
+
+- [x] `deployment/raspberry-pi/install.sh` — idempotent, aborts if system packages missing, never runs `sudo apt`, never overwrites `.env`
+- [x] `deployment/raspberry-pi/rasapi.service` — non-root systemd unit, default `127.0.0.1`, commented LAN-binding alternative, `Restart=on-failure`, modest sandboxing (`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=full`)
+- [x] `deployment/raspberry-pi/env.example.pi` — Pi-tuned defaults, LLM off, no real credentials
+- [x] `deployment/raspberry-pi/smoke-test.sh` — 9-endpoint smoke check, `BASE_URL` configurable
+- [x] `deployment/raspberry-pi/backup.sh` and `restore.sh` — DB + audit logs, never touches `.env`
+- [x] `deployment/raspberry-pi/setup-pi.md` — 19-step copy-pasteable guide including optional Ollama and Tailscale appendices
+- [x] `deployment/raspberry-pi/troubleshooting.md`
+- [x] `docs/deployment.md` — top-level deployment overview + future phases
+- [x] **31 new file/content/permission tests** in `tests/test_deployment_files.py`
+- [x] **185 tests passing** (0 regressions)
+
+**Security invariants maintained:**
+
+- Default systemd binding is `127.0.0.1`; LAN binding is opt-in by editing a single line.
+- Service runs as `<PI_USER>`, not root. Test rejects `User=root`.
+- `install.sh` never modifies `/etc/`, never runs `sudo apt`, never overwrites `.env`.
+- Backup and restore exclude `.env`. Tests enforce no copy of `.env` in either script.
+- No authentication added; all warnings against public exposure are visible in README, setup guide, dashboard footer, and security model.
+
+**Reserved for later phases:**
+
+- [ ] Authentication / sessions (Phase 8)
+- [ ] HTTPS / reverse proxy patterns (Phase 8)
+- [ ] Tailscale / WireGuard install automation (Phase 8)
+- [ ] Docker image (Phase 8+)
+- [ ] OpenAI / Anthropic blog feeds when official RSS endpoints exist (any phase)
+
+---
+
+## 🔮 Phase 7 — Voice I/O
 
 **Goal:** Hands-free operation on Pi 5, fully local.
 
@@ -195,23 +230,21 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🔮 Phase 7 — Raspberry Pi Deployment
+## 🔮 Phase 8 — Authentication and Remote-Access Hardening
 
-**Goal:** Production-grade deployment on Pi 5 with sensible defaults.
+**Goal:** Make remote access safe so the dashboard can be exposed beyond the Pi-local default.
 
-**Planned:**
+**Planned (none of this exists yet):**
 
-- [ ] Hardened `scripts/setup.sh` that automates the full bootstrap
-- [ ] systemd service unit (`rasapi.service`) with auto-restart
-- [ ] Bind to localhost by default; explicit `.env` flag to expose on LAN
-- [ ] Firewall rules (`ufw`) sample config
-- [ ] Log rotation via `logrotate` (audit JSONL files)
-- [ ] Optional: nginx reverse proxy with HTTPS via mDNS / Tailscale
-- [ ] Dockerfile (`linux/arm64`) for users who prefer containers
-- [ ] Health monitoring: `/metrics` endpoint (Prometheus format)
-- [ ] First-boot wizard for `.env` generation and model selection
-
-**Out of scope for Phase 5:** any cloud component. If cloud fallback is ever added, it will be a deliberate Phase 6+ design decision behind explicit user consent.
+- [ ] Authentication: API key header for `/ask` and `/dashboard`; or session cookies for the dashboard
+- [ ] HTTPS termination via a documented reverse proxy (Caddy or nginx)
+- [ ] CSRF tokens on dashboard form-POST endpoints
+- [ ] Tailscale/WireGuard install patterns documented and optionally automated
+- [ ] Firewall sample (`ufw`) with explicit rules
+- [ ] Log rotation via `logrotate` for audit JSONL files
+- [ ] Optional Dockerfile (`linux/arm64`) for users who prefer containers
+- [ ] `/metrics` endpoint (Prometheus format) for monitoring
+- [ ] First-boot wizard that generates `API_SECRET_KEY` and substitutes `<PI_USER>` in the systemd unit automatically
 
 ---
 

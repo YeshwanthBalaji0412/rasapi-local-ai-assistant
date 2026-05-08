@@ -452,6 +452,83 @@ Tests cover: malformed lines mixed with valid ones, missing log directory, and s
 
 ---
 
+## Deployment posture (Phase 6)
+
+Phase 6 ships a Raspberry Pi deployment without changing application code. The trust model is unchanged from earlier phases — Phase 6 only documents and codifies how the existing app is run in production-ish conditions.
+
+### 1. Local-only by binding ⚠️
+
+The shipped `rasapi.service` binds to `127.0.0.1:8000`. Only processes on the Pi itself can reach the dashboard until the operator deliberately edits the unit to use `--host 0.0.0.0`. README, the systemd unit comments, the dashboard footer, and `setup-pi.md` all warn against public exposure. Phase 6 introduces no authentication; that is a future phase.
+
+The 0.0.0.0 alternative is shipped commented out so editing it in is a one-line, intentional act.
+
+### 2. Non-root systemd service
+
+```
+User=<PI_USER>
+Group=<PI_USER>
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/<PI_USER>/rasapi-local-ai-assistant
+```
+
+A test (`test_rasapi_service_does_not_run_as_root`) parses the unit file and rejects any uncommented `User=root` line. The placeholder `<PI_USER>` is also enforced — a hardcoded login name would cause a different test to fail.
+
+### 3. install.sh is hands-off
+
+- Aborts (does not run `sudo apt`) if `python3`, `python3-venv`, `python3-pip`, or `git` are missing — prints the exact apt command for the user to run.
+- Never overwrites `.env`. If one already exists, install.sh leaves it alone and prints a notice.
+- Does not modify the firewall.
+- Does not install Ollama or Tailscale.
+- Does not write outside the project tree.
+
+A test asserts the script does not contain a bare `sudo apt install` invocation outside of echo/printf strings.
+
+### 4. File permission guidance
+
+| Path | Mode | Why |
+|---|---|---|
+| `.env` | `600` | Contains `API_SECRET_KEY` and other config. Operator-managed. |
+| `backend/data/` | `700` | SQLite database. |
+| `logs/` | `700` | Audit log files. |
+
+`install.sh` creates `backend/data/` and `logs/` with mode `700` where the OS allows. `.env` permissions remain the operator's responsibility — `setup-pi.md` prints the `chmod 600 .env` command in step 5.
+
+### 5. Backup and restore exclude `.env`
+
+`deployment/raspberry-pi/backup.sh` copies only `backend/data/rasapi.db` and `logs/audit-*.jsonl` into `~/rasapi-backups/<timestamp>/`. A test (`test_backup_script_does_not_copy_env_file`) parses the script and rejects any `cp / mv / tar / rsync` line referencing `.env`. The restore script enforces the same rule.
+
+This means a leaked backup archive does not leak secrets — only data and audit history.
+
+### 6. No public exposure (charter, not just policy)
+
+| Channel | Phase 6 default | Phase 6 supports? |
+|---|---|---|
+| LAN | Off (must edit unit) | Yes, with warning |
+| Public internet | Off | No, ever, in this phase |
+| Tailscale / WireGuard / SSH tunnel | Off | Documented as future, not configured |
+
+A test (`test_setup_pi_warns_against_public_exposure`) verifies the setup guide warns against port-forwarding to the public internet. Adding a public-exposure code path would require deleting that test, which is a code-review-visible change.
+
+### 7. Update flow leaves the security model intact
+
+`git pull --ff-only` + `pip install -r requirements.txt` + `sudo systemctl restart rasapi` is the entire update flow. No schema migration step in Phase 6 (every CREATE is `IF NOT EXISTS`). No state-mutating script other than backup/restore.
+
+### Out of scope for Phase 6 (deliberately)
+
+- Authentication / sessions — comes when remote access does
+- HTTPS / TLS termination — needs a reverse proxy or a tunnel
+- CSRF tokens — relevant once auth is added
+- Tailscale / WireGuard install automation — operator decision
+- Docker image
+- Multi-user / multi-host deployment
+
+These are tracked in [`docs/roadmap.md`](roadmap.md).
+
+---
+
 ## Audit logging behaviour
 
 Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD.jsonl`. Files rotate daily. Entries are append-only and never modified after writing.

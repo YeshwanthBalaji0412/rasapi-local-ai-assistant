@@ -471,6 +471,96 @@ python -m pytest tests/ -v
 
 ---
 
+## Phase 6 — Raspberry Pi deployment screenshots
+
+These prove the project runs end-to-end on real hardware.
+
+### P6-1. SSH session into the Pi
+**File:** `docs/images/p6-01-ssh.png`
+
+```bash
+ssh <PI_USER>@<pi-host-or-ip>
+hostname && uname -a
+```
+
+Capture the prompt + the model line so it's clear this is the Pi, not your Mac.
+
+### P6-2. Install + smoke test
+**File:** `docs/images/p6-02-install.png`
+
+```bash
+cd ~/rasapi-local-ai-assistant
+git pull --ff-only
+bash deployment/raspberry-pi/install.sh
+bash deployment/raspberry-pi/smoke-test.sh
+```
+
+**Expected:** Install steps each show a `──` heading, then 9 PASS lines from the smoke test.
+
+### P6-3. systemctl status
+**File:** `docs/images/p6-03-systemctl.png`
+
+```bash
+sudo systemctl status rasapi
+```
+
+**Expected:** `Active: active (running)`, `Main PID:`, `Memory:`, `CPU:`, and a few recent log lines from journald.
+
+### P6-4. Dashboard from MacBook
+**File:** `docs/images/p6-04-dashboard-from-mac.png`
+**Why it matters:** Proves LAN access works — the headline screenshot for "RasaPi running on real hardware".
+
+In your MacBook browser:
+```
+http://<PI_LAN_IP>:8000/dashboard
+```
+
+Capture the full dashboard. (This requires step 11 in setup-pi.md — switching the systemd unit to `--host 0.0.0.0`.)
+
+### P6-5. Reboot + auto-start
+**File:** `docs/images/p6-05-reboot-autostart.png`
+
+```bash
+sudo reboot
+# wait ~30 seconds, SSH back in:
+sudo systemctl status rasapi
+```
+
+**Expected:** Service is `active (running)` with `Started` timestamp matching the post-reboot uptime. Optionally include `uptime` output in the same screenshot.
+
+### P6-6. Audit log on the Pi
+**File:** `docs/images/p6-06-pi-audit.png`
+
+```bash
+ls -la ~/rasapi-local-ai-assistant/logs/
+tail -n 5 ~/rasapi-local-ai-assistant/logs/audit-*.jsonl
+```
+
+**Expected:** Files exist with mode `-rw-------`, owned by `<PI_USER>`. Recent JSONL entries visible.
+
+### P6-7. Backup script output
+**File:** `docs/images/p6-07-backup.png`
+
+```bash
+bash deployment/raspberry-pi/backup.sh
+ls -la ~/rasapi-backups/
+ls -la ~/rasapi-backups/<latest>/
+```
+
+**Expected:** Timestamped folder containing `rasapi.db` and `audit-*.jsonl`. Confirm `.env` is **not** present in the backup.
+
+### P6-8. Tests passing (185/185)
+**File:** `docs/images/p6-08-tests-185.png`
+
+```bash
+cd backend && source .venv/bin/activate && cd ..
+python -m pytest tests/ -v
+```
+
+**Expected:** Final line `======= 185 passed in <time> =======`.
+
+---
+
 ## Optional bonus screenshots
 
 These aren't required but strengthen the story:
