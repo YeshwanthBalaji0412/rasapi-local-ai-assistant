@@ -47,14 +47,26 @@ class AuditLogger:
             "query": query[:500],
         })
 
-    def log_llm_call(self, *, request_id: str, model: str, duration_ms: int) -> None:
-        _write({
+    def log_llm_call(
+        self,
+        *,
+        request_id: str,
+        model: str,
+        outcome: str,
+        duration_ms: int,
+        reason: str | None = None,
+    ) -> None:
+        entry: dict = {
             "timestamp": _now_iso(),
             "event_type": "llm_call",
             "request_id": request_id,
             "model": model,
+            "outcome": outcome,
             "duration_ms": duration_ms,
-        })
+        }
+        if reason:
+            entry["reason"] = reason
+        _write(entry)
 
     def log_command(
         self,
