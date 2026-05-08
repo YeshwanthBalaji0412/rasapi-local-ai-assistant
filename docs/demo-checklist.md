@@ -298,6 +298,102 @@ python -m pytest tests/ -v
 
 ---
 
+## Phase 4 — daily briefing screenshots
+
+These show the briefing layer in action. Capture with the Phase 4 build running and a clean DB. Each curl below is self-contained.
+
+### P4-1. Configured sources
+**File:** `docs/images/p4-01-sources.png`
+**Why it matters:** Demonstrates the registry — every source is public, named, and version-controlled. No secrets exposed.
+
+```bash
+curl -s http://localhost:8000/briefing/sources | python3 -m json.tool | head -40
+```
+
+**Expected:** JSON listing each source with `name`, `category`, `kind`, `url`. Categories include `world_news`, `ai_news`, `tech_news`, `developer_news`, `boston_weather`, `immigration_updates`, `personalized_action_items`.
+
+### P4-2. Refresh run
+**File:** `docs/images/p4-02-refresh.png`
+**Why it matters:** Shows the manual refresh path with run metadata.
+
+```bash
+curl -s -X POST http://localhost:8000/briefing/refresh | python3 -m json.tool
+```
+
+**Expected:** `run_id`, `item_count`, `status` (`success` or `partial`), and an `errors` array (empty if every source returned). Bonus: capture the audit log right after with `tail -n 20 logs/audit-*.jsonl | grep briefing`.
+
+### P4-3. Daily briefing (REST)
+**File:** `docs/images/p4-03-daily-rest.png`
+
+```bash
+curl -s http://localhost:8000/briefing/daily | python3 -m json.tool | head -60
+```
+
+**Expected:** `text` field with category headers and headlines, and `items_by_category` for programmatic use.
+
+### P4-4. Daily briefing (conversational)
+**File:** `docs/images/p4-04-daily-ask.png`
+**Why it matters:** Same data, conversational interface, auto-refresh on cache miss.
+
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"what'\''s happening today"}' | python3 -m json.tool
+```
+
+**Expected:** `intent: "daily_briefing"`, `response` containing multiple category sections.
+
+### P4-5. AI news
+**File:** `docs/images/p4-05-ai-news.png`
+
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"give me AI news"}' | python3 -m json.tool
+```
+
+**Expected:** `intent: "ai_briefing"`, headlines from Hugging Face / Google AI Blog.
+
+### P4-6. Boston weather
+**File:** `docs/images/p4-06-weather.png`
+
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"Boston weather"}' | python3 -m json.tool
+```
+
+**Expected:** `intent: "weather_briefing"`, response with location, current temp, and high/low.
+
+### P4-7. Immigration briefing with disclaimer
+**File:** `docs/images/p4-07-immigration-disclaimer.png`
+**Why it matters:** **The Phase 4 linchpin screenshot.** Proves the legal disclaimer is appended.
+
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"F1 OPT updates"}' | python3 -m json.tool
+```
+
+**Expected:** Response text ends with *"These are official-source updates only, not legal advice…"*
+
+### P4-8. Audit log entries for a briefing run
+**File:** `docs/images/p4-08-briefing-audit.png`
+
+```bash
+tail -n 20 logs/audit-*.jsonl | grep -E "briefing|weather_fetch"
+```
+
+**Expected:** A sequence of `briefing_refresh_started`, multiple `briefing_item_stored`, `weather_fetch_completed` (or `_failed`), `briefing_refresh_completed`, `briefing_served`.
+
+### P4-9. Tests passing (126/126)
+**File:** `docs/images/p4-09-tests-126.png`
+
+```bash
+cd backend && source .venv/bin/activate && cd ..
+python -m pytest tests/ -v
+```
+
+**Expected:** Final line `======= 126 passed in <time> =======`.
+
+---
+
 ## Optional bonus screenshots
 
 These aren't required but strengthen the story:

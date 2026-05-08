@@ -26,6 +26,12 @@ RasaPi runs on a home network and accepts natural-language input that, by design
 | **LLM writing to memory store (Phase 3)** | Model output interpreted as a memory write | `core/local_llm.py` does not import `core/memory.py` or `core/tasks.py`. Memory writes only happen via the deterministic router or direct REST. Tested in `test_phase3_routing.py::test_llm_response_does_not_create_memory`. |
 | **SQL injection via memory value** | User crafts SQL-like value | All writes use parameterized queries (`?` placeholders). Tested in `test_save_memory_uses_parameterized_sql` — a literal `'; DROP TABLE …; --` survives a round-trip and the table remains intact. |
 | **Memory leakage to LLM** | List operation results passed back to the model | List results are returned to the user, never re-injected into a prompt. The LLM module receives only the user's current query. |
+| **Briefing leaks user data (Phase 4)** | RSS/weather subsystem reads memory/notes/tasks | `backend/briefing/` does not import `core/memory.py`, `core/tasks.py`, `core/command_runner.py`, or `subprocess`. Structural test enforces this. |
+| **Briefing path executes commands (Phase 4)** | RSS content interpreted as shell | RSS items are stored verbatim as text and never templated into a shell or template engine. |
+| **Personalized briefing leaks personal data** | `personalized_action_items` populated from local memory | Phase 4 leaves this category as a documented empty stub. Populating it requires a future explicit security decision. |
+| **LLM summary leaks personal data (Phase 4)** | LLM summary call sends user data | The summary path receives ONLY public source headlines (titles + source names). Test mocks the LLM and inspects call args. Both `ENABLE_LOCAL_LLM` AND `ENABLE_LLM_BRIEFING_SUMMARY` must be true; default is off-off. |
+| **Treating immigration content as legal advice** | User acts on briefing as guidance | Hardcoded disclaimer appended to all immigration responses. Test asserts presence on `/ask` and `/briefing/category/immigration_updates`. |
+| **Aggressive scraping of public sources** | Repeated `/ask` calls hammer feeds | `BRIEFING_CACHE_MINUTES=60` cap on auto-refresh from `/ask`. Manual `POST /briefing/refresh` is operator-initiated. Per-source timeout `BRIEFING_FETCH_TIMEOUT_SECONDS=10`. |
 
 ---
 
@@ -302,6 +308,80 @@ Phase 3 does not enforce a specific filesystem mode on `backend/data/rasapi.db`.
 
 ---
 
+## Daily briefing (Phase 4)
+
+Phase 4 adds a public-source news + weather digest. Three security properties are enforced by code, not just policy.
+
+### 1. Public sources only, no API keys
+
+The source registry is hardcoded in `backend/briefing/sources.py`. Every URL is publicly accessible. No source requires authentication or sends a user identifier. Open-Meteo (the weather provider) is a free European public-data service with no API key and no per-user tracking.
+
+Outbound HTTPS connections during a briefing refresh are limited to the hosts listed in the `Source` registry plus `api.open-meteo.com`. No other hosts are contacted.
+
+### 2. Briefing cannot read personal data
+
+```
+   user query ──► router ──► matched briefing intent ──► briefing/generator
+                                                            │
+                                                            │  ONLY reads:
+                                                            │   - briefing_items / briefing_runs (DB)
+                                                            │   - public RSS hosts
+                                                            │   - api.open-meteo.com
+                                                            │
+                                                            └──► NEVER reads:
+                                                                  core/memory.py
+                                                                  core/tasks.py
+                                                                  core/command_runner.py
+                                                                  subprocess
+
+   memory_items / notes / tasks tables  ──► reachable only from core/memory and core/tasks
+```
+
+A test (`test_briefing_package_does_not_import_memory_or_tasks_or_subprocess`) AST-walks every file in `backend/briefing/` and fails the build if any forbidden import appears. Adding such an import would require deleting the test, which is the kind of change a code reviewer would notice.
+
+### 3. LLM briefing summary is opt-in-opt-in
+
+The Phase 4 generator only invokes the LLM when **both** flags are true:
+
+```
+ENABLE_LOCAL_LLM         ENABLE_LLM_BRIEFING_SUMMARY    Behaviour
+─────────────────────────────────────────────────────────────────
+false (default)          false (default)               No LLM call. Deterministic format.
+true                     false (default)               No LLM call. Deterministic format.
+false                    true                          No LLM call. Deterministic format.
+true                     true                          One sync Ollama call per refresh.
+```
+
+When the LLM does run, the prompt contains only:
+- The hardcoded system prompt: *"You are summarizing public news headlines into a 2-3 sentence digest. Reply with plain text only."*
+- A user message: numbered list of `title (source_name)` for items already fetched from public sources.
+
+It never sees memory, notes, tasks, audit logs, env values, or filesystem content. A test mocks the LLM and inspects call args to ensure no personal data appears.
+
+If the LLM call fails (timeout, connection error), the briefing falls back to the deterministic formatter and audits `llm_briefing_summary_skipped`.
+
+### 4. Immigration disclaimer
+
+Any briefing response that includes USCIS items appends:
+
+> *"These are official-source updates only, not legal advice. Verify with USCIS, your school OGS, or a qualified immigration advisor."*
+
+Hardcoded in `briefing/formatter.py`. Tests verify it appears on both `/ask` immigration responses and the JSON field of `/briefing/category/immigration_updates`.
+
+### 5. Personalized category is a documented empty stub
+
+`personalized_action_items` is registered in `CATEGORIES` and `SOURCES` (kind=`placeholder`) but always returns `[]` from the fetcher. Populating it from the user's memory or tasks would let briefing read personal data, which would weaken the structural guarantees in section 2. Doing so requires an explicit Phase 4.5+ design decision.
+
+### 6. Out-of-scope (deliberately, until later phases)
+
+- Background scheduler — manual refresh only via `POST /briefing/refresh` or auto-refresh on cache miss in `/ask`
+- Slack / email delivery
+- Cloud LLM summarization
+- Embeddings / semantic search
+- Custom user-supplied source URLs (registry is hardcoded for review)
+
+---
+
 ## Audit logging behaviour
 
 Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD.jsonl`. Files rotate daily. Entries are append-only and never modified after writing.
@@ -318,6 +398,12 @@ Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD
 | `memory_listed` / `note_listed` / `task_listed` | A list query was served | `timestamp`, `request_id`, `event_type`, `item_type` |
 | `task_completed` | A task was marked done (or attempt) | as above with `item_id`, `outcome` (`success`/`noop`/`error`), `reason` (`already_done`/`not_found`) |
 | `sensitive_memory_blocked` | A memory or note write was rejected | `timestamp`, `request_id`, `item_type`, `outcome="blocked"`, `reason` (pattern name, not content) |
+| `briefing_refresh_started` / `briefing_refresh_completed` / `briefing_refresh_failed` | Briefing run lifecycle | `timestamp`, `request_id`, `outcome` (`started`/`success`/`partial`/`error`), `category`, `item_count` |
+| `briefing_source_failed` | One source raised during refresh | `timestamp`, `request_id`, `source_name`, `category`, `reason` (truncated) |
+| `briefing_item_stored` | A new item passed dedup and was inserted | `timestamp`, `request_id`, `source_name`, `category` |
+| `briefing_served` | A read query for items was executed | `timestamp`, `request_id`, `category`, `item_count` |
+| `weather_fetch_completed` / `weather_fetch_failed` | Open-Meteo call result | `timestamp`, `request_id`, `source_name`, `outcome`, `reason` (on failure) |
+| `llm_briefing_summary_used` / `llm_briefing_summary_skipped` | Whether the LLM digest path ran on this request | `timestamp`, `request_id`, `outcome`, `item_count` (when used), `reason` (when skipped due to error) |
 
 ### Example entry
 

@@ -65,7 +65,7 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🟡 Phase 3 — Local Memory, Notes, and Tasks (in progress)
+## ✅ Phase 3 — Local Memory, Notes, and Tasks (complete)
 
 **Goal:** Give the assistant a memory across sessions — locally-stored memory items, free-form notes, and a tasks list.
 
@@ -99,7 +99,49 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🔮 Phase 4 — Voice I/O
+## 🟡 Phase 4 — Daily Intelligence Briefing (in progress)
+
+**Goal:** A free, local-first news + weather digest. No API keys. No cloud LLM. The deterministic intent router still runs first.
+
+**Delivered:**
+
+- [x] `backend/briefing/` package: `sources.py`, `rss_client.py`, `weather.py`, `generator.py`, `formatter.py`
+- [x] Hardcoded source registry covering world, AI, tech, developer, weather, immigration
+- [x] `feedparser==6.0.11` added to `requirements.txt`
+- [x] Open-Meteo weather provider (no API key, free public-data service)
+- [x] SQLite schema extended with `briefing_items` and `briefing_runs` tables + indexes
+- [x] Seven new intents: `daily_briefing`, `world_briefing`, `ai_briefing`, `tech_briefing`, `developer_briefing`, `weather_briefing`, `immigration_briefing`
+- [x] Five REST endpoints under `/briefing`
+- [x] Auto-refresh on `/ask` cache miss (`BRIEFING_CACHE_MINUTES=60` default)
+- [x] Per-source dedup (URL or category+title within 7 days)
+- [x] Partial-success handling: one source failing doesn't kill the briefing
+- [x] Hardcoded immigration disclaimer appended to all immigration responses
+- [x] Optional opt-in-opt-in LLM summarization (`ENABLE_LOCAL_LLM` AND `ENABLE_LLM_BRIEFING_SUMMARY` both required, both default to off/false)
+- [x] 10 new audit event types (`briefing_refresh_*`, `briefing_source_failed`, `briefing_item_stored`, `briefing_served`, `weather_fetch_*`, `llm_briefing_summary_*`)
+- [x] **126 tests passing** (49 new, including a structural AST test that fails the build if `briefing/` ever imports memory/tasks/subprocess)
+
+**Security invariants maintained:**
+
+- Briefing path cannot read memory/notes/tasks (structural test).
+- Briefing path cannot invoke `command_runner.run_command` (mock-and-fail test).
+- Briefing intents short-circuit before any conversational LLM dispatch.
+- LLM summary call only sees public source headlines, never personal data.
+- All RSS/weather network egress is to hosts named in the hardcoded registry — runtime URL injection is impossible.
+
+**Reserved for a future explicit security decision:**
+
+- `personalized_action_items` category exists as a documented empty stub. Phase 4 deliberately does not feed it from local memory or tasks.
+
+**Still to do (deferred):**
+
+- [ ] Background scheduler (deferred to a later phase; Phase 4 is manual refresh only)
+- [ ] Slack delivery (documented as future integration only)
+- [ ] Auto-prune of old `briefing_items` rows
+- [ ] Add OpenAI / Anthropic blog feeds when official RSS endpoints become available
+
+---
+
+## 🔮 Phase 5 — Voice I/O
 
 **Goal:** Hands-free operation on Pi 5, fully local.
 
@@ -117,7 +159,7 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🔮 Phase 5 — Raspberry Pi Deployment
+## 🔮 Phase 6 — Raspberry Pi Deployment
 
 **Goal:** Production-grade deployment on Pi 5 with sensible defaults.
 

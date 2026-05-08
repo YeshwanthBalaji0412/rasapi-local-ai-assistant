@@ -1,57 +1,58 @@
 # RasaPi — Architecture
 
-This document describes the architecture as it exists in code today (Phases 1 and 2 complete; Phase 3 in progress). Future phases will extend specific modules without changing existing interfaces.
+This document describes the architecture as it exists in code today (Phases 1, 2, and 3 complete; Phase 4 in progress). Future phases will extend specific modules without changing existing interfaces.
 
 ---
 
 ## High-level system view
 
 ```
-                            ┌──────────────────────────────────────────────┐
-                            │              Raspberry Pi 5                  │
-                            │                                              │
-   HTTP (LAN only)          │  ┌────────────────────────────────────────┐  │
-   ──────────────────────►  │  │           FastAPI Backend              │  │
-   GET  /health             │  │                                        │  │
-   GET  /commands           │  │  api/routes/health.py                  │  │
-   POST /ask                │  │  api/routes/assistant.py               │  │
-                            │  └──────────────┬─────────────────────────┘  │
-                            │                 │                            │
-                            │       ┌─────────▼──────────┐                 │
-                            │       │  config.py (.env)  │                 │
-                            │       └────────────────────┘                 │
-                            │                                              │
-                            │  ┌────────────────────────────────────────┐  │
-                            │  │              core/                     │  │
-                            │  │                                        │  │
-                            │  │  intent_router.py  (keyword → intent)  │  │
-                            │  │  command_runner.py (subprocess)        │  │
-                            │  │  local_llm.py      (Ollama HTTP)  ──┐  │  │
-                            │  │  memory.py         (memory+notes)──┼──┼──┐
-                            │  │  tasks.py          (tasks)         │  │  │
-                            │  └──────────────┬──────────────────────┼──┘  │
-                            │                 │                      │     │
-                            │                 │            ┌─────────▼──┐  │
-                            │                 │            │  Ollama    │  │
-                            │                 │            │  :11434    │  │
-                            │                 │            │  (local)   │  │
-                            │                 │            └────────────┘  │
-                            │                 │                            │
-                            │  ┌──────────────▼──────────────────────────┐ │
-                            │  │            storage/                     │ │
-                            │  │  database.py + schema.py                │ │
-                            │  │  → backend/data/rasapi.db (SQLite)      │ │
-                            │  └─────────────────────────────────────────┘ │
-                            │                 │                            │
-                            │  ┌──────────────▼─────────────────────────┐  │
-                            │  │            security/                   │  │
-                            │  │                                        │  │
-                            │  │  allowlist.py  (default-deny gate)     │  │
-                            │  │  audit_log.py  → logs/*.jsonl          │  │
-                            │  └────────────────────────────────────────┘  │
-                            │                                              │
-                            └──────────────────────────────────────────────┘
+                  ┌────────────────────────────────────────────────────────────┐
+                  │                   Raspberry Pi 5                            │
+                  │                                                             │
+  HTTP (LAN)      │  ┌──────────────────────────────────────────────────────┐  │
+  ─────────────►  │  │               FastAPI Backend                        │  │
+                  │  │  api/routes:  health  assistant  memory  tasks       │  │
+                  │  │               briefing                               │  │
+                  │  └─────────┬────────────────────────────────────────────┘  │
+                  │            │                                                │
+                  │   ┌────────▼─────────┐                                      │
+                  │   │ config.py (.env) │                                      │
+                  │   └──────────────────┘                                      │
+                  │                                                             │
+                  │  ┌──────────────────────────┐  ┌────────────────────────┐  │
+                  │  │          core/           │  │     briefing/          │  │
+                  │  │                          │  │     (Phase 4)          │  │
+                  │  │  intent_router.py        │  │  sources.py            │  │
+                  │  │  command_runner.py       │  │  rss_client.py ───────┐│  │
+                  │  │  local_llm.py ──────┐    │  │  weather.py    ──────┐││  │
+                  │  │  memory.py          │    │  │  generator.py        │││  │
+                  │  │  tasks.py           │    │  │  formatter.py        │││  │
+                  │  └─────────┬───────────┼────┘  └─────────────────────┬┴┴┘  │
+                  │            │           │                             │     │
+                  │            │     ┌─────▼──────┐                      │     │
+                  │            │     │  Ollama    │                      │     │
+                  │            │     │  :11434    │              ┌───────▼──┐  │
+                  │            │     │  (local)   │              │ public   │  │
+                  │            │     └────────────┘              │ RSS +    │  │
+                  │            │                                 │ open-meteo│ │
+                  │            ▼                                 └──────────┘  │
+                  │  ┌──────────────────────┐                                   │
+                  │  │     storage/         │ ◄── briefing also writes here     │
+                  │  │  database.py         │                                   │
+                  │  │  schema.py           │                                   │
+                  │  │  → rasapi.db         │                                   │
+                  │  └──────────────────────┘                                   │
+                  │                                                             │
+                  │  ┌──────────────────────────────────────────────────────┐  │
+                  │  │                  security/                           │  │
+                  │  │  allowlist.py  audit_log.py  sensitive_data.py       │  │
+                  │  └──────────────────────────────────────────────────────┘  │
+                  │                                                             │
+                  └────────────────────────────────────────────────────────────┘
 ```
+
+Important: the `briefing/` package does **not** import from `core/memory.py`, `core/tasks.py`, `core/command_runner.py`, or `subprocess`. A structural test enforces this, so personal user data cannot leak into a briefing context.
 
 The whole stack is one Python process. No daemons, no message queue, no DB in Phase 1 — JSONL on disk is the only persistence layer.
 
@@ -137,6 +138,55 @@ When the router matches one of `save_memory`, `list_memory`, `save_note`, `list_
 ```
 
 Direct REST endpoints (`POST /memory`, `POST /tasks`, …) skip the router and call the same service functions directly. The sensitive-data check and audit log fire in both surfaces because they live in the service layer.
+
+### Phase 4 — daily briefing branch
+
+When the router matches one of the briefing intents (`daily_briefing`, `world_briefing`, `ai_briefing`, `tech_briefing`, `developer_briefing`, `weather_briefing`, `immigration_briefing`), dispatch goes to a handler in `briefing/generator.py`:
+
+```
+   matched briefing intent
+            │
+            ▼
+   briefing/generator.py
+            │
+            │  1. cache check: SELECT FROM briefing_runs
+            │       WHERE created_at > now - BRIEFING_CACHE_MINUTES
+            │
+            ├── cache HIT → SELECT FROM briefing_items
+            │
+            └── cache MISS → for source in SOURCES:
+                  │     try fetch (rss_client.fetch_rss_items
+                  │                 OR weather.fetch_weather)
+                  │     ├── on success: dedupe + INSERT briefing_items
+                  │     │              + audit (briefing_item_stored)
+                  │     └── on failure: audit (briefing_source_failed)
+                  │                     continue with next source
+                  └── INSERT briefing_runs (status=success|partial)
+                       + audit (briefing_refresh_completed)
+            │
+            ▼
+   briefing/formatter.format_daily_briefing(items_by_category)
+            │
+            │  if both LLM flags true:
+            │      headlines (titles + source names ONLY) → local_llm.generate_briefing_summary
+            │      audit (llm_briefing_summary_used)
+            │  else:
+            │      deterministic header-per-category formatting
+            │
+            │  if items contain immigration_updates:
+            │      append IMMIGRATION_DISCLAIMER
+            │
+            ▼
+   formatted text returned to assistant route
+```
+
+REST endpoints (`/briefing/refresh`, `/briefing/daily`, `/briefing/category/{c}`, `/briefing/sources`) hit the same service functions directly.
+
+The briefing package's outbound network calls go to:
+- the public RSS hosts in `briefing/sources.py` (BBC, NPR, Hugging Face, Google AI Blog, Ars Technica, The Verge, Hacker News mirror, USCIS)
+- `api.open-meteo.com` for weather (no API key)
+
+No other hosts are contacted.
 
 ---
 
@@ -274,6 +324,12 @@ If any layer rejects, the audit log records `outcome="rejected"` (or `"error"`) 
 | `storage/database.py` | `db_session()` context manager, `init_db()` | config, schema |
 | `storage/schema.py` | `CREATE TABLE` statements | — |
 | `security/sensitive_data.py` | Regex + keyword detector for secrets | — |
+| `api/routes/briefing.py` | `GET /briefing[/daily]`, `GET /briefing/category/{c}`, `POST /briefing/refresh`, `GET /briefing/sources` | briefing.* |
+| `briefing/sources.py` | Hardcoded `Source` registry + `CATEGORIES` constants | — |
+| `briefing/rss_client.py` | httpx + feedparser fetcher; raises `SourceFetchError` on network/HTTP issues | config |
+| `briefing/weather.py` | Open-Meteo client (no API key); returns dict or None | config |
+| `briefing/generator.py` | refresh, dedup, cache check, dispatch, optional LLM summary | briefing.*, storage, audit_log, core/local_llm |
+| `briefing/formatter.py` | Daily and category text rendering; immigration disclaimer | — |
 | `security/allowlist.py` | Default-deny command whitelist | — |
 | `security/audit_log.py` | Append-only JSONL event sink | config |
 
