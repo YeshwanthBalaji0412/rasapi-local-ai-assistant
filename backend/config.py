@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     briefing_fetch_timeout_seconds: int = 10
     briefing_cache_minutes: int = 60
 
+    # ── Dashboard (Phase 5) ───────────────────────────────────────────────
+    # When true, the dashboard renders only the last two segments of the
+    # configured database path so the absolute filesystem location is hidden.
+    dashboard_mask_db_path: bool = True
+
     api_secret_key: str = "change-me-before-use"
 
     database_path: str = "backend/data/rasapi.db"

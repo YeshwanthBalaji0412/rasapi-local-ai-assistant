@@ -159,4 +159,29 @@ class AuditLogger:
         _write(entry)
 
 
+    def log_dashboard_event(
+        self,
+        *,
+        request_id: str,
+        event_type: str,
+        outcome: str = "success",
+        reason: str | None = None,
+    ) -> None:
+        """
+        Records a dashboard event. event_type is one of:
+          dashboard_viewed, dashboard_health_viewed, dashboard_audit_viewed,
+          dashboard_security_events_viewed,
+          dashboard_briefing_refresh_requested, dashboard_task_completed.
+        """
+        entry: dict = {
+            "timestamp": _now_iso(),
+            "event_type": event_type,
+            "request_id": request_id,
+            "outcome": outcome,
+        }
+        if reason:
+            entry["reason"] = reason[:200]
+        _write(entry)
+
+
 audit_logger = AuditLogger()

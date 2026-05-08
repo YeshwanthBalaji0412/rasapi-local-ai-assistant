@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ overview.name }} — Local Dashboard</title>
+  <link rel="stylesheet" href="/static/dashboard.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="brand">
+    <h1>{{ overview.name }}</h1>
+    <p class="subtitle">Local-first secure AI assistant</p>
+  </div>
+  <div class="meta">
+    <span class="badge running">Running</span>
+    <span class="version">v{{ overview.version }}</span>
+    <span class="phase">{{ overview.phase }}</span>
+  </div>
+</header>
+
+<main>
+
+  {# ── Overview ──────────────────────────────────────────────────────── #}
+  <section class="card">
+    <h2>Overview</h2>
+    <dl class="kv">
+      <dt>Assistant</dt><dd>{{ overview.name }}</dd>
+      <dt>Version</dt><dd>{{ overview.version }}</dd>
+      <dt>Phase</dt><dd>{{ overview.phase }}</dd>
+      <dt>Local LLM</dt>
+      <dd>
+        {% if overview.enable_local_llm %}
+          <span class="badge enabled">enabled</span>
+        {% else %}
+          <span class="badge disabled">disabled</span>
+        {% endif %}
+      </dd>
+      <dt>Briefing</dt>
+      <dd>
+        {% if overview.enable_briefing %}
+          <span class="badge enabled">enabled</span>
+        {% else %}
+          <span class="badge disabled">disabled</span>
+        {% endif %}
+      </dd>
+      <dt>LLM briefing summary</dt>
+      <dd>
+        {% if overview.enable_llm_briefing_summary %}
+          <span class="badge enabled">enabled</span>
+        {% else %}
+          <span class="badge disabled">disabled</span>
+        {% endif %}
+      </dd>
+      <dt>Log level</dt><dd>{{ overview.log_level }}</dd>
+      <dt>Database</dt><dd><code>{{ overview.database_path }}</code></dd>
+      <dt>Audit log dir</dt><dd><code>{{ overview.audit_log_dir }}</code></dd>
+    </dl>
+  </section>
+
+  {# ── System Health ─────────────────────────────────────────────────── #}
+  <section class="card">
+    <h2>System Health</h2>
+    <dl class="kv">
+      <dt>Time (UTC)</dt><dd>{{ health.current_time_utc }}</dd>
+      <dt>Python</dt><dd>{{ health.python_version }}</dd>
+      <dt>Platform</dt><dd>{{ health.platform }}</dd>
+      <dt>Disk total</dt><dd>{{ health.disk_total_gb }} GB</dd>
+      <dt>Disk used</dt>
+      <dd>{{ health.disk_used_gb }} GB ({{ health.disk_used_percent }}%)</dd>
+      <dt>Disk free</dt><dd>{{ health.disk_free_gb }} GB</dd>
+      <dt>Load avg (1, 5, 15)</dt>
+      <dd>
+        {% if health.load_avg_1_5_15 %}{{ health.load_avg_1_5_15 }}
+        {% else %}<span class="muted">not available on this platform</span>{% endif %}
+      </dd>
+    </dl>
+  </section>
+
+  {# ── Assistant Commands ────────────────────────────────────────────── #}
+  <section class="card">
+    <h2>Assistant Commands</h2>
+    {% for phase, items in intents|dictsort %}
+      {% if items %}
+        <h3>Phase {{ phase }}</h3>
+        <ul class="intent-list">
+          {% for it in items %}
+            <li><code>{{ it.name }}</code> — {{ it.description }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endfor %}
+  </section>
+
+  {# ── Memory / Notes / Tasks ────────────────────────────────────────── #}
+  <section class="card">
+    <h2>Memory, Notes &amp; Tasks</h2>
+
+    <h3>Recent memory</h3>
+    {% if memory_summary.memory %}
+      <ul class="row-list">
+        {% for m in memory_summary.memory %}
+          <li>
+            <span class="row-id">#{{ m.id }}</span>
+            {% if m.key %}<span class="tag">{{ m.key }}</span>{% endif %}
+            <span class="row-value">{{ m.value }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No memory items yet.</p>
+    {% endif %}
+
+    <h3>Recent notes</h3>
+    {% if memory_summary.notes %}
+      <ul class="row-list">
+        {% for n in memory_summary.notes %}
+          <li><span class="row-id">#{{ n.id }}</span> {{ n.content }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No notes yet.</p>
+    {% endif %}
+
+    <h3>Open tasks
+      <span class="counts">
+        {{ memory_summary.open_tasks|length }} open ·
+        {{ memory_summary.completed_count }} done ·
+        {{ memory_summary.total_count }} total
+      </span>
+    </h3>
+    {% if memory_summary.open_tasks %}
+      <ul class="row-list">
+        {% for t in memory_summary.open_tasks %}
+          <li>
+            <span class="row-id">#{{ t.id }}</span>
+            {% if t.priority == "high" %}<span class="tag warn">high</span>{% endif %}
+            <span class="row-value">{{ t.title }}</span>
+            <form method="post"
+                  action="/dashboard/tasks/{{ t.id }}/complete"
+                  class="inline-form">
+              <button type="submit" class="btn btn-small">Complete</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No open tasks. You're caught up.</p>
+    {% endif %}
+  </section>
+
+  {# ── Daily Briefing ────────────────────────────────────────────────── #}
+  <section class="card">
+    <h2>Daily Briefing</h2>
+
+    <h3>Counts by category</h3>
+    <ul class="row-list">
+      {% for cat, count in briefing_summary.counts_by_category|dictsort %}
+        <li>
+          <span class="tag">{{ cat }}</span>
+          <span class="row-value">{{ count }} item{{ "" if count == 1 else "s" }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+
+    <h3>Last refresh</h3>
+    {% if briefing_summary.last_run %}
+      <dl class="kv">
+        <dt>Run ID</dt><dd>#{{ briefing_summary.last_run.id }}</dd>
+        <dt>Type</dt><dd>{{ briefing_summary.last_run.briefing_type }}</dd>
+        <dt>Created</dt><dd>{{ briefing_summary.last_run.created_at }}</dd>
+        <dt>Items</dt><dd>{{ briefing_summary.last_run.item_count }}</dd>
+        <dt>Status</dt>
+        <dd>
+          {% if briefing_summary.last_run.status == "success" %}
+            <span class="badge enabled">success</span>
+          {% elif briefing_summary.last_run.status == "partial" %}
+            <span class="badge warn">partial</span>
+          {% else %}
+            <span class="badge error">{{ briefing_summary.last_run.status }}</span>
+          {% endif %}
+        </dd>
+        {% if briefing_summary.last_run.error %}
+          <dt>Errors</dt><dd>{{ briefing_summary.last_run.error }}</dd>
+        {% endif %}
+      </dl>
+    {% else %}
+      <p class="muted">No briefing run yet.</p>
+    {% endif %}
+
+    <form method="post"
+          action="/dashboard/briefing/refresh"
+          class="inline-form">
+      <button type="submit" class="btn">Refresh briefing</button>
+    </form>
+  </section>
+
+  {# ── Local LLM (config only — no live ping) ───────────────────────── #}
+  <section class="card">
+    <h2>Local LLM</h2>
+    <dl class="kv">
+      <dt>Status</dt>
+      <dd>
+        {% if llm_summary.enabled %}
+          <span class="badge enabled">enabled</span>
+        {% else %}
+          <span class="badge disabled">disabled</span>
+        {% endif %}
+      </dd>
+      <dt>Provider</dt><dd>{{ llm_summary.provider }}</dd>
+      <dt>Model</dt><dd><code>{{ llm_summary.model }}</code></dd>
+      <dt>Base URL</dt><dd><code>{{ llm_summary.base_url_host }}</code></dd>
+      <dt>Briefing summary</dt>
+      <dd>
+        {% if llm_summary.briefing_summary_enabled %}
+          <span class="badge enabled">enabled</span>
+        {% else %}
+          <span class="badge disabled">disabled</span>
+        {% endif %}
+      </dd>
+      <dt>Timeout</dt><dd>{{ llm_summary.timeout_seconds }}s</dd>
+    </dl>
+    <p class="muted small">
+      Configuration only — the dashboard does not ping Ollama.
+    </p>
+  </section>
+
+  {# ── Audit Log ─────────────────────────────────────────────────────── #}
+  <section class="card">
+    <h2>Recent Audit Events</h2>
+    {% if audit_recent %}
+      <ul class="audit-list">
+        {% for e in audit_recent %}
+          <li>
+            <span class="audit-time">{{ e.timestamp }}</span>
+            <span class="tag">{{ e.event_type }}</span>
+            {% if e.outcome %}
+              <span class="tag {% if e.outcome in ['error','blocked','rejected','partial'] %}warn{% endif %}">
+                {{ e.outcome }}
+              </span>
+            {% endif %}
+            {% if e.command %}<code>{{ e.command }}</code>{% endif %}
+            {% if e.source_name %}<span class="muted">{{ e.source_name }}</span>{% endif %}
+            {% if e.reason %}<span class="muted">— {{ e.reason }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No audit events yet.</p>
+    {% endif %}
+  </section>
+
+  {# ── Security Events ───────────────────────────────────────────────── #}
+  <section class="card">
+    <h2>Security Events</h2>
+    {% if security_events %}
+      <ul class="audit-list">
+        {% for e in security_events %}
+          <li>
+            <span class="audit-time">{{ e.timestamp }}</span>
+            <span class="tag warn">{{ e.event_type }}</span>
+            {% if e.outcome %}
+              <span class="tag warn">{{ e.outcome }}</span>
+            {% endif %}
+            {% if e.reason %}<span class="muted">{{ e.reason }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No security events recorded.</p>
+    {% endif %}
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <p>Local-only dashboard. Do not expose publicly.</p>
+</footer>
+
+</body>
+</html>

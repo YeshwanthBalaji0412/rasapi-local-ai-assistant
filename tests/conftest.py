@@ -21,5 +21,9 @@ from storage.database import init_db
 def isolated_db(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     monkeypatch.setattr(settings, "database_path", str(db_path))
+    # Phase 5: also isolate audit log dir so dashboard audit-reader tests
+    # don't pick up entries from other test files or the dev environment.
+    log_dir = tmp_path / "logs"
+    monkeypatch.setattr(settings, "audit_log_dir", str(log_dir))
     init_db()
     yield
