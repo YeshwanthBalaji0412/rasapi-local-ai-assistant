@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from api.routes import assistant, health, memory, tasks
+from api.routes import assistant, briefing, health, memory, tasks
 from config import settings
 from storage.database import init_db
 
@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.assistant_name,
     description="Local-first secure AI assistant on Raspberry Pi 5",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url=None,
@@ -36,3 +36,4 @@ app.include_router(health.router)
 app.include_router(assistant.router)
 app.include_router(memory.router)
 app.include_router(tasks.router)
+app.include_router(briefing.router)

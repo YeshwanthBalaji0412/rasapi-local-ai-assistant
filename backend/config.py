@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     local_llm_model: str = "llama3.2:1b"
     local_llm_timeout_seconds: int = 20
 
+    # ── Daily Briefing (Phase 4) ──────────────────────────────────────────
+    enable_briefing: bool = True
+    enable_llm_briefing_summary: bool = False
+    briefing_max_items_per_category: int = 5
+    briefing_default_location: str = "Boston, MA"
+    briefing_weather_lat: float = 42.3601
+    briefing_weather_lon: float = -71.0589
+    briefing_fetch_timeout_seconds: int = 10
+    briefing_cache_minutes: int = 60
+
     api_secret_key: str = "change-me-before-use"
 
     database_path: str = "backend/data/rasapi.db"

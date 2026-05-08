@@ -19,6 +19,7 @@ Why keyword-based:
 from dataclasses import dataclass
 from typing import Callable
 
+from briefing import generator as briefing_generator
 from core import memory, tasks
 from core.command_runner import run_command
 
@@ -117,6 +118,62 @@ INTENTS: tuple[Intent, ...] = (
         description="Show your open tasks",
         keywords=("show tasks", "list tasks", "my tasks", "open tasks"),
         handler=tasks.list_tasks_text,
+    ),
+    # ── Phase 4 — daily briefing ─────────────────────────────────────────
+    Intent(
+        name="immigration_briefing",
+        description="Show official immigration / F-1 / OPT updates",
+        keywords=(
+            "immigration update",
+            "immigration news",
+            "f1 opt",
+            "f-1 opt",
+            "uscis",
+            "opt update",
+        ),
+        handler=briefing_generator.handle_immigration_briefing,
+    ),
+    Intent(
+        name="weather_briefing",
+        description="Local weather briefing",
+        keywords=("boston weather", "weather briefing", "weather today", "weather"),
+        handler=briefing_generator.handle_weather_briefing,
+    ),
+    Intent(
+        name="ai_briefing",
+        description="Recent AI news",
+        keywords=("ai news", "ai briefing", "ml news", "machine learning news"),
+        handler=briefing_generator.handle_ai_briefing,
+    ),
+    Intent(
+        name="developer_briefing",
+        description="Developer / Hacker News briefing",
+        keywords=("developer news", "hacker news", "dev news", "engineering news"),
+        handler=briefing_generator.handle_developer_briefing,
+    ),
+    Intent(
+        name="tech_briefing",
+        description="General tech news",
+        keywords=("tech news", "technology news", "tech briefing"),
+        handler=briefing_generator.handle_tech_briefing,
+    ),
+    Intent(
+        name="world_briefing",
+        description="World news headlines",
+        keywords=("world news", "world briefing", "global news"),
+        handler=briefing_generator.handle_world_briefing,
+    ),
+    Intent(
+        name="daily_briefing",
+        description="Full daily briefing across all categories",
+        keywords=(
+            "daily briefing",
+            "what's happening today",
+            "what is happening today",
+            "today's briefing",
+            "morning briefing",
+        ),
+        handler=briefing_generator.handle_daily_briefing,
     ),
     # ── Phase 1 — system info ────────────────────────────────────────────
     Intent(

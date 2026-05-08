@@ -123,4 +123,40 @@ class AuditLogger:
         _write(entry)
 
 
+    def log_briefing_event(
+        self,
+        *,
+        request_id: str,
+        event_type: str,
+        outcome: str = "success",
+        category: str | None = None,
+        source_name: str | None = None,
+        item_count: int | None = None,
+        reason: str | None = None,
+    ) -> None:
+        """
+        Records a briefing event. event_type is one of:
+          briefing_refresh_started, briefing_refresh_completed,
+          briefing_refresh_failed, briefing_source_failed,
+          briefing_item_stored, briefing_served,
+          weather_fetch_completed, weather_fetch_failed,
+          llm_briefing_summary_used, llm_briefing_summary_skipped.
+        """
+        entry: dict = {
+            "timestamp": _now_iso(),
+            "event_type": event_type,
+            "request_id": request_id,
+            "outcome": outcome,
+        }
+        if category:
+            entry["category"] = category
+        if source_name:
+            entry["source_name"] = source_name
+        if item_count is not None:
+            entry["item_count"] = item_count
+        if reason:
+            entry["reason"] = reason[:200]
+        _write(entry)
+
+
 audit_logger = AuditLogger()

@@ -121,3 +121,56 @@ async def generate_chat_response(query: str) -> str:
         raise LocalLLMUnavailable("ollama returned empty content")
 
     return text.strip()
+
+
+# ─── Phase 4: synchronous briefing-summary helper ─────────────────────────────
+
+
+_BRIEFING_SYSTEM_PROMPT = (
+    "You are summarizing public news headlines into a 2-3 sentence digest. "
+    "Reply with plain text only. Do not output commands, code, or "
+    "instructions to run code. Keep it factual and brief."
+)
+
+
+def generate_briefing_summary(headlines: list[str]) -> str:
+    """
+    Synchronous Ollama call used only by the briefing generator when both
+    ENABLE_LOCAL_LLM and ENABLE_LLM_BRIEFING_SUMMARY are true.
+
+    `headlines` must contain ONLY public source content (titles + source
+    names). Memory, notes, tasks, audit logs, and env values must never
+    appear here.
+    """
+    if not headlines:
+        return ""
+
+    user_msg = "Summarize these headlines:\n" + "\n".join(
+        f"- {h}" for h in headlines[:30]
+    )
+
+    url = f"{settings.ollama_base_url.rstrip('/')}/api/chat"
+    payload = {
+        "model": settings.local_llm_model,
+        "messages": [
+            {"role": "system", "content": _BRIEFING_SYSTEM_PROMPT},
+            {"role": "user", "content": user_msg},
+        ],
+        "stream": False,
+    }
+
+    try:
+        with httpx.Client(timeout=settings.local_llm_timeout_seconds) as client:
+            response = client.post(url, json=payload)
+        if response.status_code >= 400:
+            raise LocalLLMUnavailable(f"ollama http {response.status_code}")
+        data = response.json()
+        text = data["message"]["content"]
+    except httpx.TimeoutException as exc:
+        raise LocalLLMTimeout("briefing summary timed out") from exc
+    except (httpx.RequestError, ValueError, KeyError, TypeError) as exc:
+        raise LocalLLMUnavailable(f"ollama error: {exc}") from exc
+
+    if not isinstance(text, str) or not text.strip():
+        raise LocalLLMUnavailable("ollama returned empty content")
+    return text.strip()
