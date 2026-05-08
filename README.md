@@ -1,6 +1,6 @@
 # RasaPi — Local-First Secure AI Assistant on Raspberry Pi 5
 
-[![Phase](https://img.shields.io/badge/phase-4%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-126%2F126-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![Phase](https://img.shields.io/badge/phase-5%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-154%2F154-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 A privacy-preserving AI assistant that runs entirely on a Raspberry Pi 5. No cloud dependency. Secure command execution by default. Built iteratively, phase by phase, so every increment is testable on its own.
 
@@ -35,7 +35,8 @@ This repo is also a recruiter-facing showcase of how to build a **secure** AI sy
 | 1.5 | ✅ complete | Documentation polish, demo checklist |
 | 2 | ✅ complete | Optional Ollama LLM fallback for free-form queries (off by default) |
 | 3 | ✅ complete | Local SQLite memory, notes, and tasks with sensitive-data blocking |
-| 4 | 🟡 in progress | Daily intelligence briefing — RSS + Open-Meteo, all local, no API keys |
+| 4 | ✅ complete | Daily intelligence briefing — RSS + Open-Meteo, all local, no API keys |
+| 5 | 🟡 in progress | Local web dashboard — server-rendered HTML, no JS framework, no CDN |
 
 The deterministic intent router is still the only thing that decides what code path runs. The LLM is text-only. Memory writes go through the router or direct REST endpoints — never the LLM.
 
@@ -48,7 +49,7 @@ The deterministic intent router is still the only thing that decides what code p
 - Safe command execution gated by an allowlist with typed argument validation
 - Structured JSONL audit trail for every request, command, LLM call, and memory event
 - `.env`-based configuration via `pydantic-settings`
-- Full test suite — **126/126 passing** (`pytest`)
+- Full test suite — **154/154 passing** (`pytest`)
 
 **Phase 2 additions (opt-in via `ENABLE_LOCAL_LLM=true`):**
 
@@ -265,6 +266,42 @@ Any briefing that includes USCIS items is appended with:
 | GET | `/briefing/category/{category}` | Items in one category | — | 4 |
 | POST | `/briefing/refresh` | Fetch every source now | — | 4 |
 | GET | `/briefing/sources` | List configured sources + categories | — | 4 |
+| GET | `/dashboard` | Server-rendered HTML dashboard | — | 5 |
+| GET | `/dashboard/health` | JSON health snapshot | — | 5 |
+| GET | `/dashboard/audit/recent` | JSON list of latest audit events | `?limit=25` | 5 |
+| GET | `/dashboard/security-events` | JSON list of security-relevant events | — | 5 |
+| POST | `/dashboard/briefing/refresh` | Trigger refresh, redirect to `/dashboard` | — | 5 |
+| POST | `/dashboard/tasks/{id}/complete` | Mark task done, redirect | — | 5 |
+
+## Dashboard (Phase 5)
+
+A clean, local-only web dashboard at `http://localhost:8000/dashboard`. Server-rendered HTML, no JavaScript framework, no CDN, no remote fonts.
+
+```bash
+# Open in your browser
+open http://localhost:8000/dashboard       # macOS
+xdg-open http://localhost:8000/dashboard   # Linux
+```
+
+### Sections
+
+1. **Overview** — name, version, phase, key flags
+2. **System Health** — UTC time, Python version, platform, disk usage, load average
+3. **Assistant Commands** — every intent grouped by phase
+4. **Memory / Notes / Tasks** — last 5 of each (truncated, escaped); inline "Complete" buttons on tasks
+5. **Daily Briefing** — counts per category, last refresh status, "Refresh now" button
+6. **Local LLM** — configuration only (no live ping)
+7. **Recent Audit Events** — newest 25 entries
+8. **Security Events** — filtered: blocked memory, command rejections, LLM unavailable, briefing source failures
+
+### Privacy properties
+
+- **Local-only by design.** ⚠️ The dashboard is intended for local development. Do not expose it to the public internet — there is no authentication in Phase 5. Phase 6 deployment will add bind-to-localhost defaults and authentication.
+- **No secrets exposed.** `Settings` is projected to a hardcoded safe subset before reaching templates. `api_secret_key`, `.env` content, and full filesystem paths are never visible.
+- **HTML is escaped.** Jinja2 autoescape is on. User memory/notes/tasks content is also truncated to 200 chars.
+- **DB and audit-log paths are masked** to the last two segments by default (`dashboard_mask_db_path=true`).
+- **Two write actions only.** Refresh briefing, complete task — both call existing service functions, both audited. No free-form input field, no shell endpoint, no editing of memory/notes.
+- **Audit log reader skips malformed JSONL** so a corrupted line never crashes the page.
 
 ### Response schema for `/ask`
 
@@ -348,7 +385,7 @@ cd backend && source .venv/bin/activate
 cd .. && python -m pytest tests/ -v
 ```
 
-Expected: `126 passed`.
+Expected: `154 passed`.
 
 ---
 
@@ -401,9 +438,16 @@ rasapi-local-ai-assistant/
 │   │   ├── database.py            # SQLite session helper, init_db()
 │   │   └── schema.py              # CREATE TABLE statements
 │   ├── data/                      # SQLite DB lives here (gitignored)
+│   ├── dashboard/
+│   │   └── service.py             # View-model aggregator (Phase 5)
+│   ├── templates/
+│   │   └── dashboard.html         # Single Jinja2 template
+│   ├── static/
+│   │   └── dashboard.css          # Local CSS, no remote fonts
 │   └── security/
 │       ├── allowlist.py           # Default-deny command whitelist
 │       ├── audit_log.py           # JSONL audit logger
+│       ├── audit_reader.py        # Read-only audit log parser (Phase 5)
 │       └── sensitive_data.py      # Sensitive-data detector (Phase 3)
 ├── docs/
 │   ├── architecture.md            # System design, request flow
@@ -433,9 +477,10 @@ See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 
 - **Phase 2** ✅ Local LLM fallback via Ollama (opt-in)
 - **Phase 3** ✅ Local memory, notes, and tasks
-- **Phase 4** 🟡 Daily intelligence briefing (in progress)
-- **Phase 5** — Voice input/output (Whisper + Piper, all local)
-- **Phase 6** — Raspberry Pi deployment hardening
+- **Phase 4** ✅ Daily intelligence briefing
+- **Phase 5** 🟡 Local web dashboard (in progress)
+- **Phase 6** — Voice input/output (Whisper + Piper, all local)
+- **Phase 7** — Raspberry Pi deployment hardening
 
 ---
 

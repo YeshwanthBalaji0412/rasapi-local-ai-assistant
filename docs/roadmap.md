@@ -99,7 +99,7 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🟡 Phase 4 — Daily Intelligence Briefing (in progress)
+## ✅ Phase 4 — Daily Intelligence Briefing (complete)
 
 **Goal:** A free, local-first news + weather digest. No API keys. No cloud LLM. The deterministic intent router still runs first.
 
@@ -141,7 +141,43 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🔮 Phase 5 — Voice I/O
+## 🟡 Phase 5 — Local Web Dashboard (in progress)
+
+**Goal:** Make the project recruiter-showcase ready with a clean, local-only web dashboard at `/dashboard`. Server-rendered HTML, no JavaScript framework, no CDN.
+
+**Delivered:**
+
+- [x] `backend/dashboard/service.py` — view-model aggregator
+- [x] `backend/api/routes/dashboard.py` — 1 HTML + 3 JSON + 2 form-POST endpoints
+- [x] `backend/templates/dashboard.html` — single Jinja2 template, autoescape on
+- [x] `backend/static/dashboard.css` — local CSS, no remote fonts
+- [x] `backend/security/audit_reader.py` — read-only JSONL parser, skips malformed lines
+- [x] Two safe write actions: refresh briefing, complete task (both reuse existing services)
+- [x] Path masking via `dashboard_mask_db_path=true` (default)
+- [x] `Settings` projected to a hardcoded safe subset before reaching templates
+- [x] 6 new audit event types via `log_dashboard_event`
+- [x] `feedparser`/`jinja2` are the only two non-stdlib runtime deps so far
+- [x] **154 tests passing** (28 new, 0 regressions)
+
+**Security invariants maintained:**
+
+- No authentication yet — local-only by design, README and template footer warn against public exposure.
+- HTML autoescape on; user content truncated to 200 chars.
+- No free-form input field; form actions whitelisted to `/briefing/refresh` and `/tasks/{id}/complete` (test enforces this).
+- Audit reader is read-only and crash-resistant — malformed JSONL never breaks a page render.
+- API keys, secrets, full DB paths, and audit log dir paths never appear in rendered HTML.
+- Dashboard does not ping Ollama — configuration shown only.
+
+**Reserved for later phases:**
+
+- [ ] Authentication / sessions (Phase 7 deployment)
+- [ ] HTTPS / TLS termination (Phase 7)
+- [ ] CSRF tokens (Phase 7)
+- [ ] Editing memory / notes from the dashboard (deferred — not security-justified yet)
+
+---
+
+## 🔮 Phase 6 — Voice I/O
 
 **Goal:** Hands-free operation on Pi 5, fully local.
 
@@ -159,7 +195,7 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🔮 Phase 6 — Raspberry Pi Deployment
+## 🔮 Phase 7 — Raspberry Pi Deployment
 
 **Goal:** Production-grade deployment on Pi 5 with sensible defaults.
 

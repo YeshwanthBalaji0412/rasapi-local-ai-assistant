@@ -1,6 +1,6 @@
 # RasaPi — Architecture
 
-This document describes the architecture as it exists in code today (Phases 1, 2, and 3 complete; Phase 4 in progress). Future phases will extend specific modules without changing existing interfaces.
+This document describes the architecture as it exists in code today (Phases 1–4 complete; Phase 5 in progress). Future phases will extend specific modules without changing existing interfaces.
 
 ---
 
@@ -188,6 +188,44 @@ The briefing package's outbound network calls go to:
 
 No other hosts are contacted.
 
+### Phase 5 — Dashboard branch
+
+Browser-driven, server-rendered, read-mostly:
+
+```
+   Browser  ──►  GET /dashboard
+                   │
+                   ▼
+   api/routes/dashboard.py
+                   │
+                   │  audit_logger.log_dashboard_event(dashboard_viewed)
+                   ▼
+   dashboard/service.build_view_model()
+                   │
+                   ├── settings (projected SAFE subset)
+                   ├── stdlib: shutil.disk_usage, platform.*, os.getloadavg
+                   ├── intent_router.list_intents() (grouped by phase)
+                   ├── direct SQL on memory_items / notes / tasks / briefing_*
+                   │   (bypasses memory/tasks list functions to avoid extra
+                   │    audit events on read)
+                   ├── briefing_runs SELECT for last-refresh metadata
+                   └── security.audit_reader.read_recent / read_security_events
+                       (JSONL parser, skips malformed lines)
+                   │
+                   ▼
+   Jinja2Templates (autoescape ON)
+                   │
+                   ▼
+   HTML response (links static/dashboard.css)
+```
+
+Two write paths exist:
+
+- `POST /dashboard/briefing/refresh` → calls existing `briefing.refresh_briefing` then 303 redirects to `/dashboard`
+- `POST /dashboard/tasks/{id}/complete` → calls existing `tasks.complete_task` then 303 redirects
+
+Both reuse the existing audited service functions. The dashboard adds a `dashboard_*_requested/completed` audit event in addition to the underlying `task_completed` / `briefing_*` events.
+
 ---
 
 ## Intent router flow
@@ -330,6 +368,11 @@ If any layer rejects, the audit log records `outcome="rejected"` (or `"error"`) 
 | `briefing/weather.py` | Open-Meteo client (no API key); returns dict or None | config |
 | `briefing/generator.py` | refresh, dedup, cache check, dispatch, optional LLM summary | briefing.*, storage, audit_log, core/local_llm |
 | `briefing/formatter.py` | Daily and category text rendering; immigration disclaimer | — |
+| `api/routes/dashboard.py` | `GET /dashboard` (HTML), `GET /dashboard/health\|/audit/recent\|/security-events` (JSON), `POST /dashboard/briefing/refresh\|/tasks/{id}/complete` | dashboard.service, briefing, tasks, audit_log |
+| `dashboard/service.py` | View-model aggregator; reads DB directly to avoid extra audit events | settings, intent_router, storage, briefing, audit_reader |
+| `security/audit_reader.py` | Read-only JSONL parser; skips malformed lines; truncates long fields | config |
+| `templates/dashboard.html` | Single Jinja2 template with autoescape on | — |
+| `static/dashboard.css` | Local CSS, no CDN, no remote fonts | — |
 | `security/allowlist.py` | Default-deny command whitelist | — |
 | `security/audit_log.py` | Append-only JSONL event sink | config |
 

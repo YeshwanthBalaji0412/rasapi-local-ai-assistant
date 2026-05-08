@@ -32,6 +32,12 @@ RasaPi runs on a home network and accepts natural-language input that, by design
 | **LLM summary leaks personal data (Phase 4)** | LLM summary call sends user data | The summary path receives ONLY public source headlines (titles + source names). Test mocks the LLM and inspects call args. Both `ENABLE_LOCAL_LLM` AND `ENABLE_LLM_BRIEFING_SUMMARY` must be true; default is off-off. |
 | **Treating immigration content as legal advice** | User acts on briefing as guidance | Hardcoded disclaimer appended to all immigration responses. Test asserts presence on `/ask` and `/briefing/category/immigration_updates`. |
 | **Aggressive scraping of public sources** | Repeated `/ask` calls hammer feeds | `BRIEFING_CACHE_MINUTES=60` cap on auto-refresh from `/ask`. Manual `POST /briefing/refresh` is operator-initiated. Per-source timeout `BRIEFING_FETCH_TIMEOUT_SECONDS=10`. |
+| **Dashboard exposes secrets (Phase 5)** | API keys, env values rendered into HTML | `Settings` is projected to a hardcoded safe subset before reaching templates. `api_secret_key`, `.env` content, and `OLLAMA_BASE_URL` (full path) are never visible. Sentinel test plants a value in `api_secret_key` and asserts it doesn't surface. |
+| **Dashboard XSS via memory/note content** | User-supplied text rendered as HTML | Jinja2 `autoescape=True`. User content also truncated to 200 chars. Regression test inserts `<script>` and asserts escaped output. |
+| **Dashboard leaks absolute filesystem paths** | `/Users/...` or `/home/...` shown in UI | `_mask_path` shows last two path segments only when `dashboard_mask_db_path=true` (default). Applies to both database path and audit log dir. End-to-end test asserts no `/Users/`, `/home/`, or `/private/var/` prefix appears in rendered HTML. |
+| **Dashboard executes arbitrary commands** | Free-form input → shell | The page contains exactly two `<form>` actions: `/dashboard/briefing/refresh` and `/dashboard/tasks/{id}/complete`. Test enumerates all form actions and rejects anything outside the whitelist. No text input fields exist. |
+| **Dashboard publicly exposed** | Operator binds to 0.0.0.0 | Phase 5 has no auth. README and template footer both warn: *"Dashboard is intended for local development only. Do not expose publicly."* Phase 7 deployment will add bind-to-localhost defaults and authentication. |
+| **Malformed audit JSONL crashes the page** | Corrupt log line during read | `audit_reader._read_filtered` catches `json.JSONDecodeError` per line and skips. Test feeds it garbage and asserts only valid events are returned. |
 
 ---
 
@@ -382,6 +388,70 @@ Hardcoded in `briefing/formatter.py`. Tests verify it appears on both `/ask` imm
 
 ---
 
+## Web Dashboard (Phase 5)
+
+Phase 5 adds a server-rendered local dashboard. Five security properties are enforced by code, not just policy.
+
+### 1. Local-only by design ⚠️
+
+The dashboard has **no authentication**. It is intended for `localhost` access during local development. README, the template footer, and this document all warn against public exposure. Phase 7 deployment will add bind-to-localhost defaults and an authentication layer.
+
+### 2. Settings are projected to a safe subset
+
+The dashboard never hands the full `Settings` object to a template. `dashboard.service.get_overview()` builds a dict with these fields only:
+
+```
+name, version, phase,
+enable_local_llm, enable_briefing, enable_llm_briefing_summary,
+log_level,
+database_path        (masked: last two segments)
+audit_log_dir        (masked: last two segments)
+```
+
+`api_secret_key`, `ollama_base_url` (full), and any future credentials are not in this projection. A sentinel test plants a unique token into `api_secret_key` and asserts it doesn't surface anywhere in the rendered HTML.
+
+### 3. HTML autoescape and content truncation
+
+Every `{{ }}` substitution is HTML-escaped by Jinja2's default autoescape. User-supplied content (memory values, note text, task titles) is also truncated to 200 chars at the service layer before rendering. Tests:
+
+- Insert `"<script>alert(1)</script>"` into a memory item, confirm the rendered HTML contains `&lt;script&gt;` not the raw tag.
+- Insert a 1000-character string, confirm no run of more than ~210 identical chars survives in the output.
+
+### 4. Form actions are explicitly whitelisted
+
+The dashboard has exactly two `<form>` elements:
+
+```html
+<form method="post" action="/dashboard/briefing/refresh">
+<form method="post" action="/dashboard/tasks/{id}/complete">
+```
+
+A test parses the rendered HTML for all `<form action="...">` values and fails if any URL outside the whitelist appears. There are no text input fields anywhere on the page. Adding one would require deleting the test, which is the kind of change a reviewer would notice.
+
+Both write actions reuse existing service functions (`briefing.refresh_briefing`, `tasks.complete_task`) — they don't introduce new code paths or new audit events beyond `dashboard_*_requested/completed`.
+
+### 5. Audit reader is read-only and crash-resistant
+
+`security/audit_reader.py`:
+
+- Only reads files matching `audit-*.jsonl` inside `settings.audit_log_dir`.
+- Catches `json.JSONDecodeError` per line; malformed lines are silently skipped.
+- Truncates any string field longer than 120 chars before returning to the dashboard.
+- Never modifies files. Never opens any other path.
+
+Tests cover: malformed lines mixed with valid ones, missing log directory, and security-event filtering (e.g. confirming a `sensitive_memory_blocked` entry surfaces in `/dashboard/security-events`).
+
+### Out-of-scope for Phase 5 (deliberately)
+
+- Authentication / sessions / CSRF tokens
+- HTTPS / TLS termination
+- User-provided source URLs or query inputs
+- Editing or deleting memory / notes
+- Arbitrary command input
+- Live Ollama reachability ping (avoided to keep dashboard cheap and not generate model load)
+
+---
+
 ## Audit logging behaviour
 
 Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD.jsonl`. Files rotate daily. Entries are append-only and never modified after writing.
@@ -404,6 +474,9 @@ Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD
 | `briefing_served` | A read query for items was executed | `timestamp`, `request_id`, `category`, `item_count` |
 | `weather_fetch_completed` / `weather_fetch_failed` | Open-Meteo call result | `timestamp`, `request_id`, `source_name`, `outcome`, `reason` (on failure) |
 | `llm_briefing_summary_used` / `llm_briefing_summary_skipped` | Whether the LLM digest path ran on this request | `timestamp`, `request_id`, `outcome`, `item_count` (when used), `reason` (when skipped due to error) |
+| `dashboard_viewed` / `dashboard_health_viewed` / `dashboard_audit_viewed` / `dashboard_security_events_viewed` | A dashboard route was rendered or queried | `timestamp`, `request_id`, `outcome="success"` |
+| `dashboard_briefing_refresh_requested` | Refresh button clicked from dashboard | `timestamp`, `request_id`. Underlying briefing events are also logged. |
+| `dashboard_task_completed` | Complete-task button clicked from dashboard | `timestamp`, `request_id`, `outcome` (`success`/`error`), `reason` (when error). The underlying `task_completed` event is also logged. |
 
 ### Example entry
 

@@ -394,6 +394,83 @@ python -m pytest tests/ -v
 
 ---
 
+## Phase 5 — dashboard screenshots
+
+These are the recruiter-facing screenshots. Capture them in a clean state with the Phase 5 build running and Ollama optionally enabled.
+
+### P5-1. Dashboard overview (full page)
+**File:** `docs/images/p5-01-overview.png`
+**Why it matters:** This is the headline screenshot. Shows the project as a polished local product, not just a CLI.
+
+```bash
+open http://localhost:8000/dashboard
+```
+
+Capture the full-page view with all 8 sections visible (you may need to scroll-stitch).
+
+### P5-2. System Health card
+**File:** `docs/images/p5-02-health.png`
+**Why it matters:** Shows the dashboard reads real system state without exposing absolute paths or environment values.
+
+Crop to just the **System Health** card. Optional: also capture the JSON endpoint:
+```bash
+curl -s http://localhost:8000/dashboard/health | python3 -m json.tool
+```
+
+### P5-3. Local LLM section
+**File:** `docs/images/p5-03-llm-config.png`
+**Why it matters:** Demonstrates the LLM is **opt-in** and that the dashboard shows configuration only — no live ping, no model load triggered.
+
+Crop to the **Local LLM** card.
+
+### P5-4. Memory / Notes / Tasks
+**File:** `docs/images/p5-04-memory-tasks.png`
+**Why it matters:** End-to-end Phase 3 surface visible at a glance; shows the inline "Complete" buttons.
+
+Pre-populate via `/ask` then crop the section:
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"remember that my domain is yeshwanthbalaji.com"}'
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"add task ship phase 5"}'
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"add task write demo screenshots"}'
+```
+
+### P5-5. Daily Briefing section with refresh button
+**File:** `docs/images/p5-05-briefing.png`
+**Why it matters:** Shows category counts and the "Refresh briefing" button. Click it once before screenshotting so the "Last refresh" panel has data.
+
+### P5-6. Recent Audit Events
+**File:** `docs/images/p5-06-audit.png`
+**Why it matters:** Demonstrates the audit trail is observable and human-readable, not just a JSONL file on disk.
+
+Crop to the **Recent Audit Events** card.
+
+### P5-7. Security Events
+**File:** `docs/images/p5-07-security.png`
+**Why it matters:** **The Phase 5 linchpin screenshot.** Shows that blocked memory attempts, source failures, and rejected commands surface at the top level.
+
+Trigger one before screenshotting:
+```bash
+curl -s -X POST http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"remember that my password is hunter2"}'
+```
+
+Then refresh `/dashboard` and crop the **Security Events** card. The new entry should be `sensitive_memory_blocked`.
+
+### P5-8. Tests passing (154/154)
+**File:** `docs/images/p5-08-tests-154.png`
+
+```bash
+cd backend && source .venv/bin/activate && cd ..
+python -m pytest tests/ -v
+```
+
+**Expected:** Final line `======= 154 passed in <time> =======`.
+
+---
+
 ## Optional bonus screenshots
 
 These aren't required but strengthen the story:
