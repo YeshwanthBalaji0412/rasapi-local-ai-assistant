@@ -23,7 +23,7 @@ Each phase is independently deployable and demoable. Later phases extend earlier
 
 ---
 
-## 🟡 Phase 1.5 — Documentation & Polish (current)
+## ✅ Phase 1.5 — Documentation & Polish (complete)
 
 **Goal:** Make the project recruiter-ready before adding more code.
 
@@ -37,24 +37,31 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🔜 Phase 2 — Ollama Local LLM Integration
+## 🟡 Phase 2 — Local LLM Fallback (in progress)
 
-**Goal:** Move from deterministic keyword matching to real natural-language understanding, all on-device.
+**Goal:** Add a conversational fallback for queries that the deterministic router cannot match — fully local, fully opt-in, zero cloud calls.
 
-**Planned:**
+**Delivered in this phase:**
 
-- [ ] Connect `core/llm.py` to live Ollama HTTP API (`/api/generate`)
-- [ ] Default model: `llama3.2:3b` (fits in 4 GB RAM, fast on Pi 5 CPU)
-- [ ] Structured output: LLM returns `{intent, args, reasoning}` JSON, never raw shell
-- [ ] Router uses LLM-proposed intent only if it maps to a known intent name
-- [ ] Fallback to Phase 1 keyword router if Ollama is unavailable
-- [ ] Per-request audit log includes `model`, `prompt_tokens`, `completion_tokens`
-- [ ] Integration tests with mocked Ollama responses
-- [ ] Health endpoint reports Ollama reachability
+- [x] New module `core/local_llm.py` — Ollama HTTP client (`/api/chat`)
+- [x] `ENABLE_LOCAL_LLM` opt-in flag (default **off**)
+- [x] Hard-coded system prompt; user query is the only dynamic input
+- [x] Default model: `llama3.2:1b` (lightweight, Pi 5 friendly)
+- [x] Configurable model + timeout via `.env`
+- [x] LLM only invoked when router returns `fallback`
+- [x] Graceful degradation on timeout / connection error / empty body
+- [x] Structured `llm_call` audit events with outcome + duration
+- [x] 9 new tests; **32/32 passing total**
+- [x] Structural test prevents `core/local_llm.py` from importing executors
 
-**Security invariant maintained:** the LLM proposes intents; the *router* and *allowlist* still own dispatch. The model can never execute a command directly.
+**Security invariant maintained:** The LLM is never an executor. `core/local_llm.py` does not import `command_runner`, `allowlist`, or `subprocess`. Output is opaque conversational text. See [docs/security-model.md](security-model.md#llm-cannot-execute-tools-phase-2).
 
-**Models considered:** `llama3.2:3b` (default), `mistral:7b` (optional, 8 GB Pi only), `phi-3-mini` (experimental).
+**Still to do (optional polish before closing the phase):**
+
+- [ ] Health endpoint reports Ollama reachability (`/health` field `local_llm: "up" | "down" | "disabled"`)
+- [ ] Optional structured-output mode: LLM proposes a known intent name; router still dispatches (advances Phase 3 readiness)
+
+**Models known to work:** `llama3.2:1b` (default), `llama3.2:3b`, `phi-3-mini`, `mistral:7b` (8 GB Pi only).
 
 ---
 

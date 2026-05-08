@@ -1,6 +1,6 @@
 # RasaPi — Local-First Secure AI Assistant on Raspberry Pi 5
 
-[![Phase](https://img.shields.io/badge/phase-1%20MVP-green)]() [![Tests](https://img.shields.io/badge/tests-23%2F23-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![Phase](https://img.shields.io/badge/phase-2%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-32%2F32-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 A privacy-preserving AI assistant that runs entirely on a Raspberry Pi 5. No cloud dependency. Secure command execution by default. Built iteratively, phase by phase, so every increment is testable on its own.
 
@@ -27,9 +27,11 @@ This repo is also a recruiter-facing showcase of how to build a **secure** AI sy
 
 ---
 
-## Phase 1 — what works today
+## Phase 2 — what works today
 
-The Phase 1 MVP is a fully working text-based assistant with three-layer command safety. **No LLM yet** — Phase 1 uses a deterministic keyword router so the security model can be validated in isolation.
+Phase 2 adds **optional local LLM fallback via Ollama** for free-form conversational queries. The Phase 1 deterministic router still runs first and remains the only path that can execute commands. The LLM is invoked only when the router has nothing to say, and its output is treated as opaque text.
+
+**Phase 1 MVP** (the foundation) is a fully working text-based assistant with three-layer command safety.
 
 **Capabilities:**
 
@@ -38,9 +40,20 @@ The Phase 1 MVP is a fully working text-based assistant with three-layer command
 - `GET /health` — liveness, version, assistant name
 - Deterministic keyword-based intent router (no model required)
 - Safe command execution gated by an allowlist with typed argument validation
-- Structured JSONL audit trail for every request and command
+- Structured JSONL audit trail for every request, command, and LLM call
 - `.env`-based configuration via `pydantic-settings`
-- Full test suite — **23/23 passing** (`pytest`)
+- Full test suite — **32/32 passing** (`pytest`)
+
+**Phase 2 additions (opt-in via `ENABLE_LOCAL_LLM=true`):**
+
+- Local Ollama integration via HTTP (`/api/chat`) — no cloud calls
+- Falls back to LLM **only** when no safe intent matches
+- Hard-coded system prompt; user query is the only dynamic content sent
+- LLM response treated as plain conversational text — never parsed, never executed
+- Graceful degradation on timeout, connection error, or empty response
+- Every LLM call audited with model name, outcome, duration, and (on error) reason
+
+> **The LLM never reaches the command runner.** `core/local_llm.py` does not import `command_runner`, `allowlist`, or `subprocess`. A dedicated structural test enforces this invariant in CI.
 
 **Supported intents (Phase 1):**
 
@@ -79,7 +92,28 @@ cp ../.env.example ../.env
 # (optional) edit ../.env to change the port, log level, etc.
 ```
 
-That's it. No model download required for Phase 1.
+That's it. **No model download required for Phase 1.**
+
+### Optional — enable local LLM fallback (Phase 2)
+
+If you want unrecognised queries to be answered by a local model:
+
+```bash
+# 1. Install Ollama (https://ollama.com)
+curl -fsSL https://ollama.com/install.sh | sh    # Linux / Pi
+# or `brew install ollama` on macOS
+
+# 2. Pull a small model
+ollama pull llama3.2:1b
+
+# 3. Start the Ollama daemon (usually runs automatically)
+ollama serve &
+
+# 4. In your .env, opt in:
+#    ENABLE_LOCAL_LLM=true
+```
+
+Phase 2 is **off by default**. Set `ENABLE_LOCAL_LLM=true` in `.env` only when you intentionally want Ollama enabled.
 
 ---
 
@@ -114,12 +148,19 @@ Audit log streams to `logs/audit-YYYY-MM-DD.jsonl` (created automatically).
 ```json
 {
   "request_id": "uuid",
-  "intent": "time | greeting | fallback | …",
-  "response": "string — output of command or built-in handler",
-  "source": "local",
+  "intent": "time | greeting | fallback | llm_fallback | llm_unavailable | …",
+  "response": "string — output of command, handler, or LLM",
+  "source": "local | local_llm",
   "duration_ms": 3
 }
 ```
+
+**Possible `intent` values:**
+- `time`, `uptime`, `disk`, `memory`, `hostname`, `system`, `cpu_temp` — Phase 1 commands
+- `greeting`, `help` — Phase 1 built-in handlers
+- `fallback` — no router match, Phase 2 disabled (or `ENABLE_LOCAL_LLM=false`)
+- `llm_fallback` — answered by local Ollama (Phase 2, only when enabled)
+- `llm_unavailable` — Ollama timed out or was unreachable; safe message returned
 
 ---
 
@@ -156,6 +197,25 @@ curl -s -X POST http://localhost:8000/ask \
 
 # Inspect audit trail
 tail -f logs/audit-*.jsonl
+
+# ──────────────────── Phase 2 only (ENABLE_LOCAL_LLM=true) ────────────────────
+
+# Conversational query — falls through router, hits Ollama
+curl -s -X POST http://localhost:8000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"explain Raspberry Pi in one sentence"}' | python3 -m json.tool
+
+# Even with the LLM enabled, a known command still goes through the router
+curl -s -X POST http://localhost:8000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"what time is it"}' | python3 -m json.tool
+# → intent: "time", source: "local"   (NOT llm_fallback)
+
+# Dangerous wording in a fallback query: LLM may answer in text, but
+# nothing is ever executed.
+curl -s -X POST http://localhost:8000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"delete all files on my computer"}' | python3 -m json.tool
 ```
 
 ### Run the test suite
@@ -165,7 +225,7 @@ cd backend && source .venv/bin/activate
 cd .. && python -m pytest tests/ -v
 ```
 
-Expected: `23 passed`.
+Expected: `32 passed`.
 
 ---
 
@@ -176,6 +236,8 @@ Every command goes through **three independent layers** before any process is sp
 ```
 Query → [1] Intent Router → [2] Allowlist Validator → [3] Subprocess (shell=False)
          keyword-matched      typed args, default-deny    no shell expansion, list args
+                │
+                └─── fallback only ───► [Phase 2] Local LLM (text-only, no executor reachable)
 ```
 
 | Layer | What it blocks |
@@ -203,7 +265,7 @@ rasapi-local-ai-assistant/
 │   ├── core/
 │   │   ├── intent_router.py       # Keyword → intent → command
 │   │   ├── command_runner.py      # subprocess(shell=False) + audit
-│   │   └── llm.py                 # Phase 2 stub
+│   │   └── local_llm.py           # Ollama HTTP client (Phase 2)
 │   └── security/
 │       ├── allowlist.py           # Default-deny command whitelist
 │       └── audit_log.py           # JSONL audit logger
@@ -233,7 +295,7 @@ The Phase 1 MVP also runs cleanly on macOS and Linux for development.
 
 See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 
-- **Phase 2** — Ollama local LLM integration
+- **Phase 2** ✅ Local LLM fallback via Ollama (in progress, opt-in)
 - **Phase 3** — Persistent memory and reminder storage
 - **Phase 4** — Voice input/output (Whisper + Piper, all local)
 - **Phase 5** — Raspberry Pi deployment hardening

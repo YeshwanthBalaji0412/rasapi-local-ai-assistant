@@ -6,7 +6,7 @@ This document is the security spec for the running Phase 1 codebase. Every claim
 
 ## Threat model
 
-RasaPi runs on a home network and accepts natural-language input that, by design, can trigger system commands. The threats that drive Phase 1's design:
+RasaPi runs on a home network and accepts natural-language input that, by design, can trigger system commands. The threats that drive Phase 1's design (and Phase 2's restraint):
 
 | Threat | Source | Mitigation in Phase 1 |
 |---|---|---|
@@ -18,7 +18,10 @@ RasaPi runs on a home network and accepts natural-language input that, by design
 | **Audit-log tampering** | Attacker writes false entries | Append-only writes; daily rotation; future phase: signing |
 | **Credential leakage** | Secrets in logs or error messages | Audit log writes only declared fields; `.env` gitignored |
 | **Unauthorized API access** | External LAN host hits `/ask` | API secret key support exists; LAN-only binding recommended (Phase 5 hardens this) |
-| **Cloud data exfiltration** | Unintended outbound call | No cloud client imported in Phase 1; Ollama is `localhost` only |
+| **Cloud data exfiltration** | Unintended outbound call | No cloud client imported. Ollama is `localhost` only and is opt-in via `ENABLE_LOCAL_LLM` |
+| **LLM tool escalation** | Model output interpreted as a command | `core/local_llm.py` does not import `command_runner`, `allowlist`, or `subprocess`. Output is opaque text. Structural test enforces this in CI. See "LLM cannot execute tools" below. |
+| **Prompt-prompt injection via LLM output** | Crafted query causes LLM to emit shell-like text that we then parse | We never parse LLM output for actions. It is a string field in the response. |
+| **System-prompt override** | User input attempts to redefine the assistant's role | System prompt is hard-coded in source; user input only fills the `user` message. |
 
 ---
 
@@ -156,6 +159,86 @@ Combined with the allowlist (Layer 2), this means even *valid* commands cannot b
 
 ---
 
+## LLM cannot execute tools (Phase 2)
+
+Phase 2 introduces an optional local LLM fallback. The LLM is **never** an executor — by design, by structure, and by test.
+
+### Where the LLM sits
+
+```
+                         router matched? ──yes──► command path (Phase 1)
+                              │
+                              no
+                              │
+                ENABLE_LOCAL_LLM == true? ──no──► Phase 1 fallback message
+                              │
+                              yes
+                              ▼
+              core/local_llm.generate_chat_response(query)
+                              │
+                              │  HTTP POST → http://localhost:11434/api/chat
+                              │  Body: {model, messages: [system_prompt, user_query], stream: false}
+                              │
+                              ▼
+                       returns: str
+                              │
+                              ▼
+       AskResponse.response = <that string, verbatim>
+                              │
+                              ▼
+                      Client receives JSON
+```
+
+The LLM's output never leaves `local_llm.py` as anything other than a `str`. The route handler places it in `AskResponse.response` and returns. That is the entire path.
+
+### Structural guarantees (enforced by tests)
+
+| Guarantee | Test in `tests/test_local_llm.py` |
+|---|---|
+| `core/local_llm.py` does not import `command_runner`, `allowlist`, or `subprocess` | `test_local_llm_module_does_not_import_executor` (AST check) |
+| Even when the LLM returns text like `"run rm -rf /"`, no command runs | `test_llm_response_never_invokes_command_runner` (mocks `run_command` to fail loudly) |
+| Known intents short-circuit before any LLM call | `test_known_intent_skips_llm`, `test_command_intent_skips_llm` |
+| Disabling the flag truly disables the LLM | `test_fallback_skips_llm_when_disabled` |
+| Errors return a static safe string, never crash | `test_ollama_timeout_returns_safe_message`, `test_ollama_connection_error_returns_safe_message` |
+
+### What the LLM is told (system prompt)
+
+The system prompt is **hard-coded** in `core/local_llm.py`. The user's query only ever appears as the `user` message. There is no API surface that lets a query overwrite or extend the system prompt.
+
+```
+You are RasaPi, a local conversational assistant running on a Raspberry Pi.
+You CANNOT execute commands, access files, modify the system, or take any
+action. The user's system tools are handled by a separate router that only
+invokes pre-approved commands. Reply only with plain conversational text.
+Do not output shell commands, code blocks intended for execution, or
+instructions to run code.
+```
+
+The system prompt is polish, not enforcement. The real guarantee is that **no executor is reachable from the LLM module.**
+
+### What is NOT sent to the LLM
+
+- `.env` values, secrets, `API_SECRET_KEY`
+- Audit log contents
+- Filesystem paths or contents
+- Conversation history (Phase 3 will introduce this with explicit user opt-in)
+- System telemetry, hostnames, IP addresses
+- Any field from `Settings` other than the model name and base URL (used for connection only)
+
+The function signature is `generate_chat_response(query: str) -> str`. That is the full input/output surface. No request context, no session, no environment.
+
+### Network egress
+
+The Ollama daemon is expected at `http://localhost:11434`. There is no code path that contacts a non-localhost LLM endpoint. To verify on a Pi:
+
+```bash
+sudo netstat -tnp | grep python   # only :8000 (FastAPI) and :11434 (Ollama) should appear
+```
+
+A future cloud phase, if ever added, will be a deliberate design decision behind explicit per-request user consent.
+
+---
+
 ## Audit logging behaviour
 
 Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD.jsonl`. Files rotate daily. Entries are append-only and never modified after writing.
@@ -167,7 +250,7 @@ Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD
 | `request` | `/ask` receives a query | `timestamp`, `request_id`, `query` (truncated to 500 chars) |
 | `command_exec` | A command completes (success / error) | `timestamp`, `request_id`, `command`, `args`, `outcome`, `duration_ms` |
 | `command_exec` (rejected) | Allowlist validator rejects | as above with `outcome="rejected"`, `reason` |
-| `llm_call` | LLM stub invoked (Phase 2 will replace) | `timestamp`, `request_id`, `model`, `duration_ms` |
+| `llm_call` | Ollama call completes (success or failure) | `timestamp`, `request_id`, `model`, `outcome` (`success`/`error`), `duration_ms`, `reason` (on error only) |
 
 ### Example entry
 

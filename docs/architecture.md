@@ -1,6 +1,6 @@
 # RasaPi — Architecture
 
-This document describes the **Phase 1** architecture as it actually exists in code today. Future phases will extend specific modules without changing existing interfaces.
+This document describes the architecture as it exists in code today (Phase 1 complete + Phase 2 in progress). Future phases will extend specific modules without changing existing interfaces.
 
 ---
 
@@ -26,8 +26,14 @@ This document describes the **Phase 1** architecture as it actually exists in co
                             │  │                                        │  │
                             │  │  intent_router.py  (keyword → intent)  │  │
                             │  │  command_runner.py (subprocess)        │  │
-                            │  │  llm.py            (Phase 2 stub)      │  │
-                            │  └──────────────┬─────────────────────────┘  │
+                            │  │  local_llm.py      (Ollama HTTP)  ──┐  │  │
+                            │  └──────────────┬──────────────────────┼──┘  │
+                            │                 │                      │     │
+                            │                 │            ┌─────────▼──┐  │
+                            │                 │            │  Ollama    │  │
+                            │                 │            │  :11434    │  │
+                            │                 │            │  (local)   │  │
+                            │                 │            └────────────┘  │
                             │                 │                            │
                             │  ┌──────────────▼─────────────────────────┐  │
                             │  │            security/                   │  │
@@ -48,40 +54,54 @@ The whole stack is one Python process. No daemons, no message queue, no DB in Ph
 ```
   Client
     │
-    │  POST /ask  {"query": "what time is it"}
+    │  POST /ask  {"query": "..."}
     ▼
   api/routes/assistant.py
     │  validate body (Pydantic: 1 ≤ len(query) ≤ 2000)
     │  generate request_id (uuid4)
     │  audit_logger.log_request(request_id, query)
     ▼
-  core/intent_router.route(query, request_id)
+  core/intent_router.route(query, request_id)              ◄─ unchanged in P2
     │
     │  for each Intent in INTENTS:
-    │      if any keyword matches query.lower():
-    │          if intent has handler:  return handler()
-    │          else:                   run_command(cmd, args)
-    │  no match → return fallback intent
+    │      keyword match → handler() or run_command(cmd, args)
+    │  no match          → RouteResult(intent="fallback")
     │
-    ▼
-  core/command_runner.run_command(request_id, cmd, args)
-    │
-    │  AllowlistValidator.validate(CommandRequest)
-    │    └─ raises ValidationError on unknown cmd / bad args
-    │       → audit_logger.log_command(outcome="rejected")
-    │       → returns "Command rejected: …"
-    │
-    │  subprocess.run([cmd, *args], shell=False, timeout=10)
-    │    └─ audit_logger.log_command(outcome="allowed", duration_ms)
-    │
-    ▼
+    ├─── matched ─────────────────────────────────────────────────────────┐
+    │                                                                      │
+    │   core/command_runner.run_command(request_id, cmd, args)             │
+    │     ├─ AllowlistValidator.validate(CommandRequest)                   │
+    │     │     └─ ValidationError → audit (rejected) → "Command rejected" │
+    │     └─ subprocess.run([cmd,*args], shell=False, timeout=10)          │
+    │           └─ audit (allowed/error, duration_ms)                      │
+    │                                                                      │
+    └─── intent == "fallback" ────────────────────────────────────────────►│
+                                                                           │
+                          ┌─ enable_local_llm == False ───┐                │
+                          │   return Phase 1 fallback msg │                │
+                          └────────────────────┬──────────┘                │
+                                               │                           │
+                          ┌─ enable_local_llm == True ────┐                │
+                          │ core/local_llm.generate_chat_response(query)  │
+                          │   httpx POST → Ollama /api/chat               │
+                          │   timeout = LOCAL_LLM_TIMEOUT_SECONDS         │
+                          │                                                │
+                          │ ┌─ 200 OK ─┐                                   │
+                          │ │ audit (success) → text → intent="llm_fallback"
+                          │ └──────────┘                                   │
+                          │ ┌─ Timeout / ConnectError / 5xx ┐              │
+                          │ │ audit (error) → safe message  │              │
+                          │ │ → intent="llm_unavailable"    │              │
+                          │ └───────────────────────────────┘              │
+                          └─────────────────────┬──────────────────────────┘
+                                                ▼
   api/routes/assistant.py
     │  build AskResponse(request_id, intent, response, source, duration_ms)
     ▼
   Client  ◄── 200 OK with JSON
 ```
 
-Every step has an audit hook. Every executable path is gated. There is no shortcut from request to subprocess that skips the gates.
+Every step has an audit hook. Every executable path is gated. The LLM branch returns plain text; **there is no path from the LLM response back to the command runner**.
 
 ---
 
@@ -130,7 +150,19 @@ The router is intentionally *not* an LLM. It is a deterministic pipeline that ke
 - No model weights, no inference time, no Ollama dependency
 - Lets the security model be validated *before* an LLM is in the loop
 
-When Phase 2 adds Ollama, the LLM proposes a structured intent name and the router *still owns the dispatch*. The LLM never executes anything directly.
+### Phase 2 LLM fallback — what changed and what didn't
+
+**Did not change:**
+- The router runs first on every request.
+- If the router matches an intent, the command path is identical to Phase 1.
+- The allowlist and `subprocess(shell=False)` layers are untouched.
+
+**Added:**
+- A new module `core/local_llm.py` with one function: `generate_chat_response(query: str) -> str`.
+- The route handler calls it **only** when the router returned `fallback` AND `ENABLE_LOCAL_LLM=true`.
+- The function returns a plain string. There is no overload that returns a "tool call" or structured action.
+
+The LLM does not propose intents that might be executed. It produces conversational text and that's it. If a future phase adds LLM-proposed intent classification, the router and allowlist will still own dispatch — the LLM will never be a direct executor.
 
 ---
 
@@ -196,10 +228,10 @@ If any layer rejects, the audit log records `outcome="rejected"` (or `"error"`) 
 | `backend/main.py` | App factory, lifespan, router registration | config, routes |
 | `backend/config.py` | Type-safe settings from `.env` | pydantic-settings |
 | `api/routes/health.py` | `GET /health` — liveness, version | config |
-| `api/routes/assistant.py` | `POST /ask`, `GET /commands` | intent_router, audit_log |
+| `api/routes/assistant.py` | `POST /ask`, `GET /commands`, LLM fallback dispatch | intent_router, local_llm, audit_log |
 | `core/intent_router.py` | Keyword matching, intent dispatch | command_runner |
 | `core/command_runner.py` | Validated subprocess execution | allowlist, audit_log |
-| `core/llm.py` | **Phase 2 stub** — not called in Phase 1 | config |
+| `core/local_llm.py` | Ollama HTTP client; conversational text only | config, httpx |
 | `security/allowlist.py` | Default-deny command whitelist | — |
 | `security/audit_log.py` | Append-only JSONL event sink | config |
 
@@ -224,7 +256,7 @@ Each module exposes a stable interface so later phases can plug in without distu
 
 | Module | Phase 2+ extension |
 |---|---|
-| `core/llm.py` | Replace stub with real Ollama HTTP calls; LLM emits structured intent JSON, router still dispatches |
+| `core/local_llm.py` | Swap Ollama for another local provider (e.g. llama.cpp HTTP) without changing the function signature |
 | `core/intent_router.py` | Add new intents to the `INTENTS` tuple; no logic change required |
 | `security/allowlist.py` | Move whitelist to a YAML file loaded at startup |
 | `security/audit_log.py` | Add a remote sink (syslog, Loki) alongside JSONL |

@@ -132,6 +132,82 @@ tail -n 5 logs/audit-*.jsonl
 
 ---
 
+## Phase 2 — Ollama LLM fallback screenshots
+
+These show the LLM in action. Capture them with `ENABLE_LOCAL_LLM=true` in `.env` and `ollama serve` running with `llama3.2:1b` pulled.
+
+### P2-1. LLM answers a free-form question
+**File:** `docs/images/p2-01-llm-fallback.png`
+**Why it matters:** Demonstrates Phase 2's added capability — the assistant can discuss things outside its hard-coded intent set, all locally.
+
+```bash
+curl -s -X POST http://localhost:8000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"explain Raspberry Pi in one sentence"}' | python3 -m json.tool
+```
+
+**Expected output:** `intent: "llm_fallback"`, `source: "local_llm"`, `response` containing a coherent answer about the Pi.
+
+### P2-2. Known command still bypasses the LLM
+**File:** `docs/images/p2-02-router-still-first.png`
+**Why it matters:** Proves the security invariant — even with the LLM enabled, known intents go through the deterministic path. No LLM call, no model latency.
+
+```bash
+curl -s -X POST http://localhost:8000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"what time is it"}' | python3 -m json.tool
+```
+
+**Expected output:** `intent: "time"`, `source: "local"` (NOT `llm_fallback`), `duration_ms` in single digits (no model inference cost).
+
+### P2-3. Dangerous query — LLM can talk about it but never runs it
+**File:** `docs/images/p2-03-dangerous-text-only.png`
+**Why it matters:** The most defensible Phase 2 screenshot. Shows the LLM may discuss destructive commands as text, but `source: "local_llm"` confirms it went through the conversational path — no command was executed.
+
+```bash
+curl -s -X POST http://localhost:8000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"delete all files on my computer"}' | python3 -m json.tool
+```
+
+**Caption:** "The LLM may produce text about destructive operations, but it has no path to an executor. The audit log shows zero `command_exec` events for this request."
+
+### P2-4. Ollama unavailable — graceful degradation
+**File:** `docs/images/p2-04-ollama-down.png`
+**Why it matters:** Service stays up even when the model crashes or the daemon is offline.
+
+```bash
+# Stop Ollama first:  pkill ollama
+curl -s -X POST http://localhost:8000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"tell me a joke"}' | python3 -m json.tool
+```
+
+**Expected output:** `intent: "llm_unavailable"`, response containing "unavailable", and a hint to use `help`.
+
+### P2-5. Audit log entry for an LLM call
+**File:** `docs/images/p2-05-llm-audit-entry.png`
+**Why it matters:** Every LLM call is auditable just like every command was in Phase 1. Same trail, same tooling.
+
+```bash
+tail -n 3 logs/audit-*.jsonl | grep llm_call
+```
+
+**Expected output:** A JSONL line with `event_type: "llm_call"`, `outcome: "success"` or `"error"`, `model`, `duration_ms`.
+
+### P2-6. Updated test suite (32/32)
+**File:** `docs/images/p2-06-tests-32.png`
+**Why it matters:** Phase 2 added 9 tests including the structural import-check that mathematically prevents the LLM from reaching the executor.
+
+```bash
+cd backend && source .venv/bin/activate && cd ..
+python -m pytest tests/ -v
+```
+
+**Expected output:** Final line `======= 32 passed in <time> =======`.
+
+---
+
 ## Optional bonus screenshots
 
 These aren't required but strengthen the story:
