@@ -31,7 +31,7 @@ def llm_disabled(monkeypatch):
 
 
 def test_known_intent_skips_llm(client, llm_enabled):
-    with patch("api.routes.assistant.local_llm.generate_chat_response", new_callable=AsyncMock) as mock_llm:
+    with patch("core.orchestration.local_llm.generate_chat_response", new_callable=AsyncMock) as mock_llm:
         resp = client.post("/ask", json={"query": "hello"})
         assert resp.status_code == 200
         body = resp.json()
@@ -40,7 +40,7 @@ def test_known_intent_skips_llm(client, llm_enabled):
 
 
 def test_command_intent_skips_llm(client, llm_enabled):
-    with patch("api.routes.assistant.local_llm.generate_chat_response", new_callable=AsyncMock) as mock_llm:
+    with patch("core.orchestration.local_llm.generate_chat_response", new_callable=AsyncMock) as mock_llm:
         resp = client.post("/ask", json={"query": "what time is it"})
         assert resp.status_code == 200
         body = resp.json()
@@ -53,7 +53,7 @@ def test_command_intent_skips_llm(client, llm_enabled):
 
 def test_fallback_calls_llm_when_enabled(client, llm_enabled):
     with patch(
-        "api.routes.assistant.local_llm.generate_chat_response",
+        "core.orchestration.local_llm.generate_chat_response",
         new=AsyncMock(return_value="A Raspberry Pi is a small single-board computer."),
     ) as mock_llm:
         resp = client.post(
@@ -72,7 +72,7 @@ def test_fallback_calls_llm_when_enabled(client, llm_enabled):
 
 
 def test_fallback_skips_llm_when_disabled(client, llm_disabled):
-    with patch("api.routes.assistant.local_llm.generate_chat_response", new_callable=AsyncMock) as mock_llm:
+    with patch("core.orchestration.local_llm.generate_chat_response", new_callable=AsyncMock) as mock_llm:
         resp = client.post("/ask", json={"query": "explain Raspberry Pi in one sentence"})
         assert resp.status_code == 200
         body = resp.json()
@@ -86,7 +86,7 @@ def test_fallback_skips_llm_when_disabled(client, llm_disabled):
 
 def test_ollama_timeout_returns_safe_message(client, llm_enabled):
     with patch(
-        "api.routes.assistant.local_llm.generate_chat_response",
+        "core.orchestration.local_llm.generate_chat_response",
         new=AsyncMock(side_effect=local_llm.LocalLLMTimeout("timeout")),
     ):
         resp = client.post("/ask", json={"query": "tell me a joke"})
@@ -99,7 +99,7 @@ def test_ollama_timeout_returns_safe_message(client, llm_enabled):
 
 def test_ollama_connection_error_returns_safe_message(client, llm_enabled):
     with patch(
-        "api.routes.assistant.local_llm.generate_chat_response",
+        "core.orchestration.local_llm.generate_chat_response",
         new=AsyncMock(side_effect=local_llm.LocalLLMUnavailable("connection refused")),
     ):
         resp = client.post("/ask", json={"query": "tell me a joke"})
@@ -115,7 +115,7 @@ def test_ollama_connection_error_returns_safe_message(client, llm_enabled):
 def test_llm_response_returned_verbatim_as_text(client, llm_enabled):
     weird_text = "Sure! `rm -rf /` would delete everything (don't run that)."
     with patch(
-        "api.routes.assistant.local_llm.generate_chat_response",
+        "core.orchestration.local_llm.generate_chat_response",
         new=AsyncMock(return_value=weird_text),
     ):
         resp = client.post("/ask", json={"query": "what does rm rf do"})
@@ -137,7 +137,7 @@ def test_llm_response_never_invokes_command_runner(client, llm_enabled):
     """
     with patch("core.command_runner.run_command", side_effect=AssertionError("LLM must never reach run_command")):
         with patch(
-            "api.routes.assistant.local_llm.generate_chat_response",
+            "core.orchestration.local_llm.generate_chat_response",
             new=AsyncMock(return_value="Run this: df -h && rm -rf ~"),
         ):
             resp = client.post("/ask", json={"query": "what should I do next"})

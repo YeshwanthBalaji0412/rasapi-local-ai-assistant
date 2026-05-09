@@ -136,7 +136,7 @@ def test_briefing_intent_does_not_invoke_conversational_llm(client, monkeypatch)
     monkeypatch.setattr(settings, "enable_local_llm", True)
     src_patch, fetch_patch = _patched_world_only()
     with src_patch, fetch_patch, patch(
-        "api.routes.assistant.local_llm.generate_chat_response",
+        "core.orchestration.local_llm.generate_chat_response",
         new_callable=AsyncMock,
     ) as mock_llm:
         resp = client.post("/ask", json={"query": "daily briefing"})
@@ -205,7 +205,7 @@ def test_phase3_add_task_still_works(client):
 def test_phase2_llm_fallback_still_works_for_non_briefing_unknowns(client, monkeypatch):
     monkeypatch.setattr(settings, "enable_local_llm", True)
     with patch(
-        "api.routes.assistant.local_llm.generate_chat_response",
+        "core.orchestration.local_llm.generate_chat_response",
         new=AsyncMock(return_value="A duck is a waterfowl."),
     ):
         resp = client.post("/ask", json={"query": "tell me a fun fact about ducks"})

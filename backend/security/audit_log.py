@@ -184,4 +184,47 @@ class AuditLogger:
         _write(entry)
 
 
+    def log_voice_event(
+        self,
+        *,
+        request_id: str,
+        event_type: str,
+        outcome: str = "success",
+        stt_engine: str | None = None,
+        tts_engine: str | None = None,
+        duration_ms: int | None = None,
+        transcript_length: int | None = None,
+        audio_saved: bool | None = None,
+        reason: str | None = None,
+    ) -> None:
+        """
+        Records a voice event. event_type is one of:
+          voice_session_started, voice_recording_completed,
+          voice_transcription_completed, voice_tts_completed,
+          voice_session_failed, voice_session_completed.
+
+        Audio bytes, file paths, and transcript content are NEVER written
+        to the audit log — only metadata.
+        """
+        entry: dict = {
+            "timestamp": _now_iso(),
+            "event_type": event_type,
+            "request_id": request_id,
+            "outcome": outcome,
+        }
+        if stt_engine is not None:
+            entry["stt_engine"] = stt_engine
+        if tts_engine is not None:
+            entry["tts_engine"] = tts_engine
+        if duration_ms is not None:
+            entry["duration_ms"] = duration_ms
+        if transcript_length is not None:
+            entry["transcript_length"] = transcript_length
+        if audio_saved is not None:
+            entry["audio_saved"] = audio_saved
+        if reason:
+            entry["reason"] = reason[:200]
+        _write(entry)
+
+
 audit_logger = AuditLogger()

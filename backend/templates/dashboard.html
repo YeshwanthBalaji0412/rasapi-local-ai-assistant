@@ -226,6 +226,76 @@
     </p>
   </section>
 
+  {# ── Voice ─────────────────────────────────────────────────────────── #}
+  <section class="card">
+    <h2>Voice</h2>
+    <dl class="kv">
+      <dt>Status</dt>
+      <dd>
+        {% if voice_summary.enabled %}
+          <span class="badge enabled">enabled</span>
+        {% else %}
+          <span class="badge disabled">disabled</span>
+        {% endif %}
+      </dd>
+      <dt>Recorder</dt><dd><code>{{ voice_summary.recorder_engine }}</code></dd>
+      <dt>STT</dt><dd><code>{{ voice_summary.stt_engine }}</code></dd>
+      <dt>TTS</dt><dd><code>{{ voice_summary.tts_engine }}</code></dd>
+      <dt>Push-to-talk</dt>
+      <dd>
+        {% if voice_summary.push_to_talk_required %}
+          <span class="badge enabled">required</span>
+        {% else %}
+          <span class="badge warn">off</span>
+        {% endif %}
+      </dd>
+      <dt>Save audio</dt>
+      <dd>
+        {% if voice_summary.save_audio %}
+          <span class="badge warn">enabled</span>
+        {% else %}
+          <span class="badge disabled">deleted after STT</span>
+        {% endif %}
+      </dd>
+      <dt>Log transcripts</dt>
+      <dd>
+        {% if voice_summary.log_transcripts %}
+          <span class="badge enabled">yes</span>
+        {% else %}
+          <span class="badge disabled">no</span>
+        {% endif %}
+      </dd>
+    </dl>
+
+    <h3>Last session</h3>
+    {% if voice_summary.last_session %}
+      <dl class="kv">
+        <dt>Time</dt><dd>{{ voice_summary.last_session.timestamp }}</dd>
+        <dt>Type</dt>
+        <dd>
+          {% if voice_summary.last_session.event_type == "voice_session_completed" %}
+            <span class="badge enabled">completed</span>
+          {% else %}
+            <span class="badge error">failed</span>
+          {% endif %}
+        </dd>
+        {% if voice_summary.last_session.duration_ms %}
+          <dt>Duration</dt><dd>{{ voice_summary.last_session.duration_ms }} ms</dd>
+        {% endif %}
+        {% if voice_summary.last_session.reason %}
+          <dt>Reason</dt><dd>{{ voice_summary.last_session.reason }}</dd>
+        {% endif %}
+      </dl>
+    {% else %}
+      <p class="muted">No voice sessions yet.</p>
+    {% endif %}
+
+    <p class="muted small">
+      Voice runs through the same router as <code>/ask</code> — it cannot
+      bypass the allowlist or memory rules. No always-listening mode.
+    </p>
+  </section>
+
   {# ── Audit Log ─────────────────────────────────────────────────────── #}
   <section class="card">
     <h2>Recent Audit Events</h2>

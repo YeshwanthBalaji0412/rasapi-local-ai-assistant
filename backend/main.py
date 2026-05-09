@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import assistant, briefing, dashboard, health, memory, tasks
+from api.routes import assistant, briefing, dashboard, health, memory, tasks, voice
 from config import settings
 from storage.database import init_db
 
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.assistant_name,
     description="Local-first secure AI assistant on Raspberry Pi 5",
-    version="0.5.0",
+    version="0.7.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url=None,
@@ -43,3 +43,4 @@ app.include_router(memory.router)
 app.include_router(tasks.router)
 app.include_router(briefing.router)
 app.include_router(dashboard.router)
+app.include_router(voice.router)

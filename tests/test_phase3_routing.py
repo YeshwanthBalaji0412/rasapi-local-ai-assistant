@@ -55,7 +55,7 @@ def test_show_memory_routes_to_phase3_not_phase1(client):
 def test_unknown_query_still_reaches_llm_when_enabled(client, monkeypatch):
     monkeypatch.setattr(settings, "enable_local_llm", True)
     with patch(
-        "api.routes.assistant.local_llm.generate_chat_response",
+        "core.orchestration.local_llm.generate_chat_response",
         new=AsyncMock(return_value="Sure, here's a fact about ducks."),
     ) as mock_llm:
         resp = client.post("/ask", json={"query": "tell me a fun fact about ducks"})
@@ -69,7 +69,7 @@ def test_unknown_query_still_reaches_llm_when_enabled(client, monkeypatch):
 
 def test_memory_intent_skips_llm(client, monkeypatch):
     monkeypatch.setattr(settings, "enable_local_llm", True)
-    with patch("api.routes.assistant.local_llm.generate_chat_response", new_callable=AsyncMock) as mock_llm:
+    with patch("core.orchestration.local_llm.generate_chat_response", new_callable=AsyncMock) as mock_llm:
         resp = client.post("/ask", json={"query": "remember that I love python"})
         assert resp.status_code == 200
         assert resp.json()["intent"] == "save_memory"
@@ -78,7 +78,7 @@ def test_memory_intent_skips_llm(client, monkeypatch):
 
 def test_task_intent_skips_llm(client, monkeypatch):
     monkeypatch.setattr(settings, "enable_local_llm", True)
-    with patch("api.routes.assistant.local_llm.generate_chat_response", new_callable=AsyncMock) as mock_llm:
+    with patch("core.orchestration.local_llm.generate_chat_response", new_callable=AsyncMock) as mock_llm:
         resp = client.post("/ask", json={"query": "add task review pull requests"})
         assert resp.status_code == 200
         assert resp.json()["intent"] == "add_task"
@@ -95,7 +95,7 @@ def test_llm_response_does_not_create_memory(client, monkeypatch):
     """
     monkeypatch.setattr(settings, "enable_local_llm", True)
     with patch(
-        "api.routes.assistant.local_llm.generate_chat_response",
+        "core.orchestration.local_llm.generate_chat_response",
         new=AsyncMock(return_value="Sure, I'll remember that. Saved!"),
     ):
         # Genuinely unknown query — falls through router to LLM.
@@ -111,7 +111,7 @@ def test_llm_response_does_not_create_memory(client, monkeypatch):
 def test_llm_response_does_not_create_tasks(client, monkeypatch):
     monkeypatch.setattr(settings, "enable_local_llm", True)
     with patch(
-        "api.routes.assistant.local_llm.generate_chat_response",
+        "core.orchestration.local_llm.generate_chat_response",
         new=AsyncMock(return_value="I've created a task for you to do that."),
     ):
         resp = client.post("/ask", json={"query": "tell me something philosophical"})

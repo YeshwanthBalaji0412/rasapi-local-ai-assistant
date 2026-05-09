@@ -236,6 +236,25 @@ def get_llm_summary() -> dict:
 # ─── audit / security ────────────────────────────────────────────────────────
 
 
+def get_voice_summary() -> dict:
+    """Voice configuration + last session, if any. Read-only."""
+    last_events = audit_reader.read_events_by_types(
+        event_types={"voice_session_completed", "voice_session_failed"},
+        limit=1,
+    )
+    last_session = last_events[0] if last_events else None
+    return {
+        "enabled": settings.enable_voice,
+        "recorder_engine": settings.voice_recorder_engine,
+        "stt_engine": settings.voice_stt_engine,
+        "tts_engine": settings.voice_tts_engine,
+        "save_audio": settings.voice_save_audio,
+        "log_transcripts": settings.voice_log_transcripts,
+        "push_to_talk_required": settings.voice_require_push_to_talk,
+        "last_session": last_session,
+    }
+
+
 def get_audit_recent(limit: int = 25) -> list[dict]:
     return audit_reader.read_recent(limit=limit)
 
@@ -255,6 +274,7 @@ def build_view_model() -> dict:
         "memory_summary": get_memory_summary(),
         "briefing_summary": get_briefing_summary(),
         "llm_summary": get_llm_summary(),
+        "voice_summary": get_voice_summary(),
         "audit_recent": get_audit_recent(),
         "security_events": get_security_events(),
     }

@@ -98,3 +98,11 @@ def read_recent(*, limit: int = 25) -> list[dict]:
 def read_security_events(*, limit: int = 50) -> list[dict]:
     """Return only security-relevant audit events, newest first."""
     return _read_filtered(limit=limit, predicate=_is_security_event)
+
+
+def read_events_by_types(*, event_types: set[str], limit: int = 25) -> list[dict]:
+    """Return events whose event_type is in `event_types`, newest first."""
+    return _read_filtered(
+        limit=limit,
+        predicate=lambda obj: obj.get("event_type") in event_types,
+    )

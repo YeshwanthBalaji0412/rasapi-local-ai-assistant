@@ -35,6 +35,24 @@ class Settings(BaseSettings):
     # configured database path so the absolute filesystem location is hidden.
     dashboard_mask_db_path: bool = True
 
+    # ── Voice I/O (Phase 7) ──────────────────────────────────────────────
+    # Voice is OFF by default. The deterministic intent router is still the
+    # only thing that decides what runs — voice is a thin record/STT/TTS
+    # layer that hands transcripts to the same orchestration.process_query
+    # path that /ask uses.
+    enable_voice: bool = False
+    voice_recorder_engine: str = "mock"  # mock | arecord | sounddevice
+    voice_stt_engine: str = "mock"       # mock | whisper
+    voice_tts_engine: str = "mock"       # mock | piper | espeak
+    voice_record_seconds: int = 5
+    voice_audio_temp_dir: str = "backend/data/audio_tmp"
+    voice_save_audio: bool = False
+    voice_log_transcripts: bool = True
+    voice_max_transcript_chars: int = 1000
+    voice_require_push_to_talk: bool = True
+    voice_device_input: str = ""
+    voice_device_output: str = ""
+
     api_secret_key: str = "change-me-before-use"
 
     database_path: str = "backend/data/rasapi.db"
