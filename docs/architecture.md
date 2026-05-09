@@ -1,6 +1,6 @@
 # RasaPi — Architecture
 
-This document describes the architecture as it exists in code today (Phases 1–5 complete; Phase 6 in progress). Future phases will extend specific modules without changing existing interfaces.
+This document describes the architecture as it exists in code today (Phases 1–6 complete; Phase 7 in progress). Future phases will extend specific modules without changing existing interfaces.
 
 ---
 
@@ -224,6 +224,62 @@ public RSS hosts and Open-Meteo (Phase 4). The Pi can run for weeks
 unattended; the systemd service auto-restarts on failure and survives
 reboots.
 
+### Phase 7 — Voice branch
+
+Voice is a thin record/STT/TTS shell around `process_query`. It does not
+introduce a new dispatch path:
+
+```
+   microphone
+      │
+      ▼
+   voice/recorder.py     (mock | arecord)        ──► writes wav under
+      │                                              backend/data/audio_tmp/
+      ▼
+   voice/stt.py          (mock | whisper.cpp)    ──► transcript (truncated)
+      │
+      ▼
+   voice/session.py
+      │
+      │  audit voice_recording_completed
+      │  audit voice_transcription_completed
+      │  if voice_log_transcripts: audit_logger.log_request(transcript)
+      │
+      ▼
+   core/orchestration.process_query(transcript, request_id)
+      │                       ▲
+      │                       │  (same function /ask uses)
+      │                       │
+      └──────────►  intent_router.route()
+                      │
+                      └─ optional: local_llm.generate_chat_response()
+                                   (if ENABLE_LOCAL_LLM and intent=fallback)
+      │
+      ▼  (intent, response_text, source)
+   voice/tts.py          (mock | espeak | piper) ──► speaker
+      │
+      │  audit voice_tts_completed
+      │  audit voice_session_completed
+      │
+      ▼
+   if not VOICE_SAVE_AUDIO: os.remove(audio_path)
+```
+
+Crucial separation:
+- `voice/session.py` does NOT import `subprocess`, `core.command_runner`,
+  or `core.local_llm`. The structural test
+  `test_voice_session_does_not_import_*` enforces this.
+- The bridge to the LLM is `orchestration.process_query`. Voice never
+  calls the LLM directly; it goes through the same router → fallback →
+  LLM-gated path that `/ask` uses.
+- Subprocess use is confined to the three adapter files
+  (`recorder.py`, `stt.py`, `tts.py`). A structural test rejects
+  subprocess imports anywhere else under `voice/`.
+
+Voice is **opt-in** (`ENABLE_VOICE=false` default). The `rasapi.service`
+unit is unchanged in Phase 7; voice is exercised via CLI or REST, not by a
+new daemon.
+
 The briefing package's outbound network calls go to:
 - the public RSS hosts in `briefing/sources.py` (BBC, NPR, Hugging Face, Google AI Blog, Ars Technica, The Verge, Hacker News mirror, USCIS)
 - `api.open-meteo.com` for weather (no API key)
@@ -419,6 +475,13 @@ If any layer rejects, the audit log records `outcome="rejected"` (or `"error"`) 
 | `deployment/raspberry-pi/rasapi.service` | systemd unit. Non-root, default `127.0.0.1`, commented LAN-binding alternative. | — |
 | `deployment/raspberry-pi/smoke-test.sh` | 9-endpoint smoke check. `BASE_URL` configurable. | curl |
 | `deployment/raspberry-pi/backup.sh` / `restore.sh` | Local DB + audit-log snapshot/restore. Excludes `.env`. | — |
+| `core/orchestration.py` | `process_query` — single source of truth for routing + LLM fallback, used by `/ask` and voice | intent_router, local_llm, audit_log |
+| `voice/recorder.py` | Audio recorder adapters (mock, arecord). The only voice file that may use subprocess for capture. | config |
+| `voice/stt.py` | STT adapters (mock, whisper.cpp). The only voice file that may use subprocess for transcription. | config |
+| `voice/tts.py` | TTS adapters (mock, espeak-ng, piper). The only voice file that may use subprocess for playback. | config |
+| `voice/session.py` | Push-to-talk orchestration. Calls `orchestration.process_query`. Does NOT import subprocess, command_runner, or local_llm. | config, orchestration, recorder, stt, tts, audit_log |
+| `voice/cli.py` | argparse entry point: `python -m voice.cli {status, record-test, stt-test, tts-test, once}` | config, voice.* |
+| `api/routes/voice.py` | `GET /voice/status`, `POST /voice/test-tts`, `POST /voice/session-once` | config, voice.session, voice.tts |
 | `security/allowlist.py` | Default-deny command whitelist | — |
 | `security/audit_log.py` | Append-only JSONL event sink | config |
 

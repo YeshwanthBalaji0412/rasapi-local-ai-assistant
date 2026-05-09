@@ -561,6 +561,85 @@ python -m pytest tests/ -v
 
 ---
 
+## Phase 7 — voice screenshots
+
+These prove the voice path works end-to-end without any cloud speech service. Capture on the Pi after running `bash deployment/raspberry-pi/audio-setup.md` steps and turning `ENABLE_VOICE=true` in `.env`.
+
+### P7-1. `voice.cli status`
+**File:** `docs/images/p7-01-voice-status.png`
+
+```bash
+cd ~/rasapi-local-ai-assistant/backend
+source .venv/bin/activate
+python -m voice.cli status
+```
+
+**Expected:** Each engine and config value printed. With voice off the engines say `mock`; with voice on they say `arecord`/`whisper`/`espeak` (or `piper`).
+
+### P7-2. `tts-test`
+**File:** `docs/images/p7-02-tts-test.png`
+
+```bash
+python -m voice.cli tts-test "Hello, I am RasaPi"
+```
+
+**Expected:** You hear the spoken output. Capture the terminal showing the engine name and the absence of any cloud-API mention.
+
+### P7-3. Push-to-talk session (the headline screenshot)
+**File:** `docs/images/p7-03-once.png`
+
+```bash
+python -m voice.cli once
+```
+
+**Expected:** Print of `transcript`, `intent`, `source`, `audio_saved=False`, `duration_ms`, and the assistant `response`. You also hear the response through your speaker.
+
+### P7-4. REST `/voice/session-once`
+**File:** `docs/images/p7-04-session-rest.png`
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/voice/session-once | python3 -m json.tool
+```
+
+**Expected:** JSON response identical to the CLI's. Same voice cycle, same router path.
+
+### P7-5. Voice card on the dashboard
+**File:** `docs/images/p7-05-dashboard-voice.png`
+
+Open `http://<PI_LAN_IP>:8000/dashboard` and crop to the **Voice** card. After P7-3 ran, "Last session" should show `completed` with a duration.
+
+### P7-6. Audit trail of a voice session
+**File:** `docs/images/p7-06-voice-audit.png`
+
+```bash
+tail -n 20 ~/rasapi-local-ai-assistant/logs/audit-*.jsonl | grep voice
+```
+
+**Expected:** A sequence: `voice_session_started`, `voice_recording_completed`, `voice_transcription_completed`, `voice_tts_completed`, `voice_session_completed`. **No** audio bytes, **no** transcript content — only metadata and a `transcript_length` integer.
+
+### P7-7. Security demo — voice "remember that …" creates memory
+**File:** `docs/images/p7-07-voice-remember.png`
+
+Speak "remember that my project is RasaPi" during the session, then:
+
+```bash
+curl -s http://127.0.0.1:8000/memory | python3 -m json.tool
+```
+
+**Expected:** A memory item containing "RasaPi" appears, proving voice and `/ask` share the same orchestration. The dashboard's Memory section now lists it.
+
+### P7-8. Tests passing (217/217)
+**File:** `docs/images/p7-08-tests-217.png`
+
+```bash
+cd backend && source .venv/bin/activate && cd ..
+python -m pytest tests/ -v
+```
+
+**Expected:** Final line `======= 217 passed in <time> =======`.
+
+---
+
 ## Optional bonus screenshots
 
 These aren't required but strengthen the story:

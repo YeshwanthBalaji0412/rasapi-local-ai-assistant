@@ -529,6 +529,79 @@ These are tracked in [`docs/roadmap.md`](roadmap.md).
 
 ---
 
+## Voice I/O (Phase 7)
+
+Phase 7 adds an opt-in push-to-talk voice interface. The trust model is unchanged: voice is just a new input/output layer that hands transcripts to the existing router. **Voice cannot create a new dispatch path.**
+
+### 1. No always-listening mode ⚠️
+
+`ENABLE_VOICE=false` is the default. Each session is a single push-to-talk cycle (`/voice/session-once` or `python -m voice.cli once`). There is no wake word, no continuous capture, no background audio daemon, no browser microphone, and no WebRTC.
+
+When voice is disabled, both `/voice/session-once` and `/voice/test-tts` return `403`. The status endpoint remains queryable and reports `enabled: false`.
+
+### 2. Voice cannot reach the executor
+
+```
+   microphone ─► voice/recorder ─► wav file
+                                     │
+                                     ▼
+                                voice/stt ─► transcript
+                                                │
+                                                ▼
+                                voice/session ─► orchestration.process_query
+                                                                  │
+                                                                  ▼
+                                                  intent_router.route()
+                                                                  │
+                                                  (Phase 1 + 3 + 4 dispatch)
+
+   ─── voice/session.py imports: config, orchestration, recorder, stt, tts, audit_log
+   ─── voice/session.py does NOT import: subprocess, core.command_runner, core.local_llm
+   ─── voice/cli.py     does NOT import: subprocess, core.command_runner
+```
+
+Subprocess usage is confined to the three engine adapter files (`recorder.py`, `stt.py`, `tts.py`) — and only for invoking locally-installed audio binaries (`arecord`, `whisper-cli`, `espeak-ng`, `piper`, `aplay`). Tests:
+
+| Test | What it proves |
+|---|---|
+| `test_voice_session_does_not_import_subprocess` | Session module is subprocess-free |
+| `test_voice_session_does_not_import_command_runner` | No reach to the executor |
+| `test_voice_session_does_not_import_local_llm` | LLM only via orchestration |
+| `test_voice_cli_does_not_import_subprocess` | CLI does not introduce a new exec path |
+| `test_only_adapter_files_import_subprocess` | Subprocess is whitelisted to recorder/stt/tts |
+| `test_voice_handler_intent_never_invokes_command_runner` | "hello" through voice does not call `run_command` |
+
+### 3. Audio bytes never appear in logs
+
+`audit_logger.log_voice_event` writes only metadata: `event_type`, `request_id`, `outcome`, `stt_engine`, `tts_engine`, `duration_ms`, `transcript_length`, `audio_saved`, optional `reason`. No file paths, no audio bytes, no transcript content.
+
+Transcripts themselves are logged (or not) via the existing `request` audit event, controlled by `VOICE_LOG_TRANSCRIPTS` (default `true` to match `/ask`). Set it to `false` if you'd rather log only voice metadata.
+
+### 4. Audio is deleted by default
+
+Each session writes a temporary `<uuid>.wav` under `backend/data/audio_tmp/` and deletes it after STT completes. `VOICE_SAVE_AUDIO=true` opts in to keeping the file (e.g. for offline debugging). The dashboard's Voice card shows whether saving is enabled — operator-visible.
+
+### 5. Transcript truncation
+
+The transcript is truncated to `VOICE_MAX_TRANSCRIPT_CHARS` (default 1000) before reaching `process_query`. This prevents a long-talking attacker from blowing up downstream allocations or smuggling pathological inputs into the router.
+
+### 6. `/voice/status` does not leak filesystem layout
+
+Like the dashboard, the voice status endpoint is built from a hardcoded safe subset of `Settings`. Tests assert the response contains no `/Users/`, `/home/`, or `/private/var/` prefix and no API-key-shaped strings.
+
+### Out of scope for Phase 7 (deliberately)
+
+- ❌ Wake word
+- ❌ Always-listening / continuous capture
+- ❌ Browser microphone, WebRTC, live streaming
+- ❌ Cloud speech APIs (OpenAI Whisper API, Google STT, Azure Speech)
+- ❌ Always-on voice systemd worker
+- ❌ Public exposure of voice endpoints (Phase 6 binds 127.0.0.1; voice inherits)
+
+These are tracked in `docs/roadmap.md`.
+
+---
+
 ## Audit logging behaviour
 
 Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD.jsonl`. Files rotate daily. Entries are append-only and never modified after writing.
@@ -554,6 +627,7 @@ Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD
 | `dashboard_viewed` / `dashboard_health_viewed` / `dashboard_audit_viewed` / `dashboard_security_events_viewed` | A dashboard route was rendered or queried | `timestamp`, `request_id`, `outcome="success"` |
 | `dashboard_briefing_refresh_requested` | Refresh button clicked from dashboard | `timestamp`, `request_id`. Underlying briefing events are also logged. |
 | `dashboard_task_completed` | Complete-task button clicked from dashboard | `timestamp`, `request_id`, `outcome` (`success`/`error`), `reason` (when error). The underlying `task_completed` event is also logged. |
+| `voice_session_started` / `voice_recording_completed` / `voice_transcription_completed` / `voice_tts_completed` / `voice_session_completed` / `voice_session_failed` | Voice session lifecycle | `timestamp`, `request_id`, `outcome`, optional `stt_engine` / `tts_engine` / `duration_ms` / `transcript_length` / `audio_saved` / `reason`. **Never** contains audio bytes, file paths, or transcript content. |
 
 ### Example entry
 

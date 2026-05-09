@@ -177,7 +177,7 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🟡 Phase 6 — Raspberry Pi Deployment (in progress)
+## ✅ Phase 6 — Raspberry Pi Deployment (complete)
 
 **Goal:** Deploy the existing backend + dashboard to a Raspberry Pi 5 as an always-on local-first service. No application code changes.
 
@@ -212,21 +212,42 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🔮 Phase 7 — Voice I/O
+## 🟡 Phase 7 — Voice I/O (in progress)
 
-**Goal:** Hands-free operation on Pi 5, fully local.
+**Goal:** Add a local push-to-talk voice interface. No wake word, no always-listening mode, no cloud speech, no audio leaving the device. Voice is a thin record/STT/TTS shell around the existing `/ask` orchestration.
 
-**Planned:**
+**Delivered:**
 
-- [ ] Wake-word detection (openWakeWord, local model)
-- [ ] Speech-to-text via `whisper.cpp` (local, CPU)
-- [ ] Text-to-speech via Piper TTS (local, fast on Pi 5)
-- [ ] Voice session manager: start, listen, transcribe, route, respond, timeout
-- [ ] Audio hardware abstraction layer (USB mic, 3.5mm or HDMI audio out)
-- [ ] Voice activity detection to avoid streaming silence
-- [ ] Audit log records voice sessions with `event_type="voice_session"` (no audio stored)
+- [x] `core/orchestration.py` — `process_query` extracted; `/ask` and voice both use it. Single source of truth for routing + LLM fallback.
+- [x] `voice/recorder.py` — mock + arecord adapters
+- [x] `voice/stt.py` — mock + whisper.cpp adapters
+- [x] `voice/tts.py` — mock + espeak-ng + piper adapters
+- [x] `voice/session.py` — push-to-talk orchestration. **No subprocess, no command_runner, no local_llm imports.**
+- [x] `voice/cli.py` — `python -m voice.cli {status, record-test, stt-test, tts-test, once}`
+- [x] `api/routes/voice.py` — `GET /voice/status`, `POST /voice/test-tts`, `POST /voice/session-once`
+- [x] Dashboard "Voice" card with engine config + last-session status
+- [x] `deployment/raspberry-pi/audio-setup.md` — full Pi audio setup, whisper.cpp build steps, Piper voice install, troubleshooting
+- [x] 6 new audit event types via `log_voice_event`. Audio bytes never leave RAM.
+- [x] Default engines are pure-Python mocks → no new pip dependencies, tests don't need a microphone
+- [x] **32 new tests, 217 total passing, 0 regressions**
 
-**Privacy invariant:** audio is processed in-memory and discarded; only transcripts are logged, and only at the user's configured log level.
+**Security invariants enforced in code AND tests:**
+
+- Voice does not introduce a new exec path. All transcripts route through `orchestration.process_query`.
+- `voice/session.py` and `voice/cli.py` cannot import `subprocess`, `core.command_runner`, or `core.local_llm`. Structural AST tests reject violations.
+- Subprocess usage is whitelisted to engine adapters only (`recorder.py`, `stt.py`, `tts.py`).
+- Voice REST endpoints return 403 when `ENABLE_VOICE=false`. Default is off.
+- Audio temp files are deleted after STT unless `VOICE_SAVE_AUDIO=true`.
+- Transcripts capped at `VOICE_MAX_TRANSCRIPT_CHARS` (default 1000).
+- Audit log never contains audio bytes, file paths, or transcript content — only metadata.
+
+**Reserved for later phases:**
+
+- [ ] Wake word ("Hey RasaPi") — Phase 9 candidate
+- [ ] Always-listening mode with VAD — needs explicit consent UX
+- [ ] Browser microphone / WebRTC — would require Phase 8 auth first
+- [ ] Background voice systemd worker
+- [ ] Cloud speech fallback — out of charter
 
 ---
 

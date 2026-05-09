@@ -1,6 +1,6 @@
 # RasaPi — Local-First Secure AI Assistant on Raspberry Pi 5
 
-[![Phase](https://img.shields.io/badge/phase-6%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-185%2F185-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![Phase](https://img.shields.io/badge/phase-7%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-217%2F217-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 A privacy-preserving AI assistant that runs entirely on a Raspberry Pi 5. No cloud dependency. Secure command execution by default. Built iteratively, phase by phase, so every increment is testable on its own.
 
@@ -37,7 +37,8 @@ This repo is also a recruiter-facing showcase of how to build a **secure** AI sy
 | 3 | ✅ complete | Local SQLite memory, notes, and tasks with sensitive-data blocking |
 | 4 | ✅ complete | Daily intelligence briefing — RSS + Open-Meteo, all local, no API keys |
 | 5 | ✅ complete | Local web dashboard — server-rendered HTML, no JS framework, no CDN |
-| 6 | 🟡 in progress | Raspberry Pi deployment — systemd service, install / smoke / backup / restore scripts |
+| 6 | ✅ complete | Raspberry Pi deployment — systemd service, install / smoke / backup / restore scripts |
+| 7 | 🟡 in progress | Voice I/O — push-to-talk, local STT/TTS, no wake word, no cloud speech |
 
 The deterministic intent router is still the only thing that decides what code path runs. The LLM is text-only. Memory writes go through the router or direct REST endpoints — never the LLM.
 
@@ -50,7 +51,7 @@ The deterministic intent router is still the only thing that decides what code p
 - Safe command execution gated by an allowlist with typed argument validation
 - Structured JSONL audit trail for every request, command, LLM call, and memory event
 - `.env`-based configuration via `pydantic-settings`
-- Full test suite — **185/185 passing** (`pytest`)
+- Full test suite — **217/217 passing** (`pytest`)
 
 **Phase 2 additions (opt-in via `ENABLE_LOCAL_LLM=true`):**
 
@@ -267,6 +268,9 @@ Any briefing that includes USCIS items is appended with:
 | GET | `/briefing/category/{category}` | Items in one category | — | 4 |
 | POST | `/briefing/refresh` | Fetch every source now | — | 4 |
 | GET | `/briefing/sources` | List configured sources + categories | — | 4 |
+| GET | `/voice/status` | Voice configuration snapshot | — | 7 |
+| POST | `/voice/test-tts` | Speak the given text via configured TTS engine | `{"text":"..."}` | 7 |
+| POST | `/voice/session-once` | One push-to-talk cycle (record → STT → /ask → TTS) | — | 7 |
 | GET | `/dashboard` | Server-rendered HTML dashboard | — | 5 |
 | GET | `/dashboard/health` | JSON health snapshot | — | 5 |
 | GET | `/dashboard/audit/recent` | JSON list of latest audit events | `?limit=25` | 5 |
@@ -386,7 +390,7 @@ cd backend && source .venv/bin/activate
 cd .. && python -m pytest tests/ -v
 ```
 
-Expected: `185 passed`.
+Expected: `217 passed`.
 
 ---
 
@@ -492,6 +496,67 @@ Full guide, troubleshooting, backup/restore, and the optional Ollama appendix: [
 
 ---
 
+## Voice I/O (Phase 7)
+
+Phase 7 adds an **opt-in, push-to-talk** voice interface. No wake word, no always-listening mode, no cloud speech, no browser microphone. Audio never leaves the device.
+
+```
+microphone  →  recorder  →  STT  →  transcript  →  orchestration.process_query  →  response  →  TTS  →  speaker
+```
+
+The crucial property: voice and `/ask` share the **same** orchestration. Voice cannot bypass the router, the allowlist, the memory rules, or the LLM gating.
+
+### Default engines: pure-Python mocks
+
+Voice ships disabled. Default `VOICE_*_ENGINE=mock` so the backend boots cleanly with no audio dependencies. Real engines are installed on the Pi and turned on with one env var:
+
+```env
+ENABLE_VOICE=true
+VOICE_RECORDER_ENGINE=arecord     # ALSA capture
+VOICE_STT_ENGINE=whisper          # whisper.cpp build
+VOICE_TTS_ENGINE=espeak           # or piper
+VOICE_DEVICE_INPUT=plughw:1,0
+VOICE_DEVICE_OUTPUT=plughw:0,0
+```
+
+Full Pi audio setup, install steps for whisper.cpp/Piper/espeak-ng, and troubleshooting: [`deployment/raspberry-pi/audio-setup.md`](deployment/raspberry-pi/audio-setup.md).
+
+### CLI
+
+```bash
+cd ~/rasapi-local-ai-assistant/backend
+source .venv/bin/activate
+
+python -m voice.cli status
+python -m voice.cli record-test
+python -m voice.cli stt-test --audio /tmp/test.wav
+python -m voice.cli tts-test "Hello, I am RasaPi"
+python -m voice.cli once          # full record → STT → /ask → TTS cycle
+```
+
+### REST endpoints
+
+```bash
+# Always available; returns config (mock engines if voice is disabled)
+curl -s http://127.0.0.1:8000/voice/status | python3 -m json.tool
+
+# Enabled-only (returns 403 when ENABLE_VOICE=false):
+curl -s -X POST http://127.0.0.1:8000/voice/test-tts \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Hello, I am RasaPi"}'
+curl -s -X POST http://127.0.0.1:8000/voice/session-once
+```
+
+### Privacy properties
+
+- **Voice cannot reach the executor.** `voice/session.py` does not import `subprocess`, `core.command_runner`, or `core.local_llm`. Subprocess use is restricted to the engine adapters (`recorder.py`, `stt.py`, `tts.py`). A structural AST test enforces this.
+- **No audio bytes in the audit log.** Only metadata: engine names, durations, transcript length, audio-saved flag.
+- **Audio deleted by default.** Temp files written to `backend/data/audio_tmp/` and removed after STT unless `VOICE_SAVE_AUDIO=true`.
+- **Transcript truncation.** Capped at `VOICE_MAX_TRANSCRIPT_CHARS` (default 1000).
+- **No always-listening, no wake word.** Each session is a single push-to-talk cycle.
+
+---
+
 ## Hardware target
 
 - Raspberry Pi 5 (8 GB recommended for Phase 2 LLM)
@@ -511,8 +576,8 @@ See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 - **Phase 3** ✅ Local memory, notes, and tasks
 - **Phase 4** ✅ Daily intelligence briefing
 - **Phase 5** ✅ Local web dashboard
-- **Phase 6** 🟡 Raspberry Pi deployment (in progress) — see [docs/deployment.md](docs/deployment.md)
-- **Phase 7** — Voice input/output (Whisper + Piper, all local)
+- **Phase 6** ✅ Raspberry Pi deployment — see [docs/deployment.md](docs/deployment.md)
+- **Phase 7** 🟡 Voice I/O (in progress) — push-to-talk, local STT/TTS
 - **Phase 8** — Authentication and remote-access hardening
 
 ---
