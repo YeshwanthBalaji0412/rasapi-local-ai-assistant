@@ -4,13 +4,17 @@ Direct REST endpoints for tasks (Phase 3).
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
 
 from core import tasks as tasks_service
+from security import auth as auth_module
 
 
-router = APIRouter(tags=["tasks"])
+router = APIRouter(
+    tags=["tasks"],
+    dependencies=[Depends(auth_module.require_auth_for_mutations)],
+)
 
 
 class TaskCreate(BaseModel):

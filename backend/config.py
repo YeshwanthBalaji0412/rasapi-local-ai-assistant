@@ -53,6 +53,22 @@ class Settings(BaseSettings):
     voice_device_input: str = ""
     voice_device_output: str = ""
 
+    # ── Authentication (Phase 8) ──────────────────────────────────────────
+    # Auth is OFF by default to preserve the current local-dev workflow.
+    # When ENABLE_AUTH=true, the four AUTH_PROTECT_* flags decide which
+    # surfaces require credentials. /health and /commands stay public always.
+    # API_SECRET_KEY is the single shared secret used for both API-key
+    # header auth and dashboard login session signing.
+    enable_auth: bool = False
+    auth_protect_dashboard: bool = True
+    auth_protect_ask: bool = True
+    auth_protect_voice: bool = True
+    auth_protect_mutations: bool = True
+    session_cookie_name: str = "rasapi_session"
+    session_ttl_minutes: int = 720
+    cookie_secure: bool = False
+    csrf_cookie_name: str = "rasapi_csrf"
+
     api_secret_key: str = "change-me-before-use"
 
     database_path: str = "backend/data/rasapi.db"

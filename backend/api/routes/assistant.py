@@ -1,11 +1,12 @@
 import time
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from core import orchestration
 from core.intent_router import list_intents
+from security import auth as auth_module
 from security.audit_log import audit_logger
 
 
@@ -28,7 +29,11 @@ class CommandsResponse(BaseModel):
     intents: list[dict]
 
 
-@router.post("/ask", response_model=AskResponse)
+@router.post(
+    "/ask",
+    response_model=AskResponse,
+    dependencies=[Depends(auth_module.require_auth_for_ask)],
+)
 async def ask(body: AskRequest) -> AskResponse:
     request_id = str(uuid.uuid4())
     start = time.monotonic()

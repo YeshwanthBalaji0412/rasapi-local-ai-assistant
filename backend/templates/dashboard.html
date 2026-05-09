@@ -17,8 +17,29 @@
     <span class="badge running">Running</span>
     <span class="version">v{{ overview.version }}</span>
     <span class="phase">{{ overview.phase }}</span>
+    {% if auth_summary.enabled %}
+      <form method="post" action="/logout" class="inline-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+        <button type="submit" class="btn btn-small">Sign out</button>
+      </form>
+    {% endif %}
   </div>
 </header>
+
+{% if auth_summary.lan_exposed_without_auth %}
+<div class="banner warn">
+  Server bound to <code>{{ auth_summary.host }}</code> with auth disabled.
+  Anyone on this network can reach the dashboard. Set
+  <code>ENABLE_AUTH=true</code> in <code>.env</code> before sharing.
+</div>
+{% endif %}
+{% if auth_summary.misconfigured %}
+<div class="banner error">
+  Auth is enabled but no <code>API_SECRET_KEY</code> is configured.
+  Protected routes are returning 503. Generate a key with
+  <code>bash deployment/raspberry-pi/generate-secret.sh</code> and paste it into <code>.env</code>.
+</div>
+{% endif %}
 
 <main>
 
@@ -140,6 +161,7 @@
             <form method="post"
                   action="/dashboard/tasks/{{ t.id }}/complete"
                   class="inline-form">
+              <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
               <button type="submit" class="btn btn-small">Complete</button>
             </form>
           </li>
@@ -192,6 +214,7 @@
     <form method="post"
           action="/dashboard/briefing/refresh"
           class="inline-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
       <button type="submit" class="btn">Refresh briefing</button>
     </form>
   </section>
@@ -223,6 +246,75 @@
     </dl>
     <p class="muted small">
       Configuration only — the dashboard does not ping Ollama.
+    </p>
+  </section>
+
+  {# ── Security (auth posture) ──────────────────────────────────────── #}
+  <section class="card">
+    <h2>Security</h2>
+    <dl class="kv">
+      <dt>Auth</dt>
+      <dd>
+        {% if auth_summary.enabled %}
+          <span class="badge enabled">enabled</span>
+        {% else %}
+          <span class="badge disabled">disabled</span>
+        {% endif %}
+      </dd>
+      <dt>Secret configured</dt>
+      <dd>
+        {% if auth_summary.secret_configured %}
+          <span class="badge enabled">yes</span>
+        {% else %}
+          <span class="badge warn">not set</span>
+        {% endif %}
+      </dd>
+      <dt>Dashboard</dt>
+      <dd>
+        {% if auth_summary.enabled and auth_summary.protect_dashboard %}
+          <span class="badge enabled">protected</span>
+        {% else %}
+          <span class="badge disabled">unprotected</span>
+        {% endif %}
+      </dd>
+      <dt>/ask</dt>
+      <dd>
+        {% if auth_summary.enabled and auth_summary.protect_ask %}
+          <span class="badge enabled">protected</span>
+        {% else %}
+          <span class="badge disabled">unprotected</span>
+        {% endif %}
+      </dd>
+      <dt>Voice</dt>
+      <dd>
+        {% if auth_summary.enabled and auth_summary.protect_voice %}
+          <span class="badge enabled">protected</span>
+        {% else %}
+          <span class="badge disabled">unprotected</span>
+        {% endif %}
+      </dd>
+      <dt>Memory / notes / tasks</dt>
+      <dd>
+        {% if auth_summary.enabled and auth_summary.protect_mutations %}
+          <span class="badge enabled">protected</span>
+        {% else %}
+          <span class="badge disabled">unprotected</span>
+        {% endif %}
+      </dd>
+      <dt>Session TTL</dt><dd>{{ auth_summary.session_ttl_minutes }} min</dd>
+      <dt>Cookie Secure</dt>
+      <dd>
+        {% if auth_summary.cookie_secure %}
+          <span class="badge enabled">yes</span>
+        {% else %}
+          <span class="badge warn">no (HTTP only)</span>
+        {% endif %}
+      </dd>
+      <dt>Bind host</dt><dd><code>{{ auth_summary.host }}</code></dd>
+    </dl>
+    <p class="muted small">
+      The API key is never displayed. Generate one with
+      <code>bash deployment/raspberry-pi/generate-secret.sh</code>.
     </p>
   </section>
 

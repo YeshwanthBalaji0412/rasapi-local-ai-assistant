@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in — RasaPi</title>
+  <link rel="stylesheet" href="/static/dashboard.css" />
+</head>
+<body>
+
+<div class="login-shell">
+  <div class="login-card">
+    <h1>RasaPi</h1>
+    <p class="subtitle">Local-first secure AI assistant</p>
+
+    {% if auth_misconfigured %}
+      <div class="banner error">
+        Auth is enabled but no <code>API_SECRET_KEY</code> is configured.
+        Generate one with <code>bash deployment/raspberry-pi/generate-secret.sh</code>
+        and paste it into <code>.env</code>.
+      </div>
+    {% endif %}
+
+    {% if error %}
+      <div class="banner warn">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/login" autocomplete="off">
+      <input type="hidden" name="next" value="{{ next_url }}" />
+      <label for="api_key">API key</label>
+      <input
+        id="api_key"
+        type="password"
+        name="api_key"
+        placeholder="paste your API_SECRET_KEY"
+        autofocus
+        required
+      />
+      <button type="submit" class="btn">Sign in</button>
+    </form>
+
+    <p class="muted small">
+      Local-only. Do not expose RasaPi to the public internet.
+    </p>
+  </div>
+</div>
+
+</body>
+</html>

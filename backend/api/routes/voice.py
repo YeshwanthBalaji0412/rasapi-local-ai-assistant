@@ -9,10 +9,11 @@ Voice REST endpoints (Phase 7).
 are local-only by Phase 6 deployment posture (systemd binds 127.0.0.1).
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from config import settings
+from security import auth as auth_module
 from voice import session as session_module
 from voice import tts as tts_module
 
@@ -67,7 +68,11 @@ def get_status() -> VoiceStatusResponse:
     )
 
 
-@router.post("/test-tts", response_model=TestTTSResponse)
+@router.post(
+    "/test-tts",
+    response_model=TestTTSResponse,
+    dependencies=[Depends(auth_module.require_auth_for_voice)],
+)
 def post_test_tts(body: TestTTSRequest) -> TestTTSResponse:
     if not settings.enable_voice:
         raise HTTPException(status_code=403, detail="voice disabled")
@@ -81,7 +86,11 @@ def post_test_tts(body: TestTTSRequest) -> TestTTSResponse:
     return TestTTSResponse(spoken=True, engine=engine.name)
 
 
-@router.post("/session-once", response_model=VoiceSessionResponse)
+@router.post(
+    "/session-once",
+    response_model=VoiceSessionResponse,
+    dependencies=[Depends(auth_module.require_auth_for_voice)],
+)
 async def post_session_once() -> VoiceSessionResponse:
     if not settings.enable_voice:
         raise HTTPException(status_code=403, detail="voice disabled")

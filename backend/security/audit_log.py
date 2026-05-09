@@ -227,4 +227,33 @@ class AuditLogger:
         _write(entry)
 
 
+    def log_auth_event(
+        self,
+        *,
+        request_id: str,
+        event_type: str,
+        outcome: str = "success",
+        reason: str | None = None,
+    ) -> None:
+        """
+        Records an auth event. event_type is one of:
+          auth_login_success, auth_login_failed, auth_logout,
+          auth_required_missing, auth_invalid_key,
+          csrf_validation_failed, protected_route_accessed.
+
+        The provided API key is NEVER stored. For failed-auth events,
+        only `reason` is recorded ("no_credentials", "invalid_key",
+        "auth_misconfigured", "csrf_mismatch", etc.).
+        """
+        entry: dict = {
+            "timestamp": _now_iso(),
+            "event_type": event_type,
+            "request_id": request_id,
+            "outcome": outcome,
+        }
+        if reason:
+            entry["reason"] = reason[:200]
+        _write(entry)
+
+
 audit_logger = AuditLogger()

@@ -219,6 +219,78 @@ code {
   white-space: nowrap;
 }
 
+/* ── Login screen (Phase 8) ─────────────────────────────────────────── */
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 32px 36px;
+  width: 100%;
+  max-width: 420px;
+}
+.login-card h1 {
+  margin: 0 0 4px;
+  font-size: 28px;
+}
+.login-card .subtitle {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 20px;
+}
+.login-card label {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin: 16px 0 6px;
+}
+.login-card input[type=password] {
+  width: 100%;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 13px;
+}
+.login-card input[type=password]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.login-card .btn {
+  margin-top: 16px;
+  width: 100%;
+  padding: 10px;
+  font-size: 13px;
+}
+
+/* ── Posture banners (Phase 8) ──────────────────────────────────────── */
+.banner {
+  margin: 16px 32px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.banner.warn {
+  background: rgba(240, 136, 62, 0.12);
+  color: var(--warn);
+  border: 1px solid rgba(240, 136, 62, 0.35);
+}
+.banner.error {
+  background: rgba(248, 81, 73, 0.12);
+  color: var(--error);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+}
+
 .site-footer {
   text-align: center;
   padding: 18px;

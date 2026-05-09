@@ -236,6 +236,34 @@ def get_llm_summary() -> dict:
 # ─── audit / security ────────────────────────────────────────────────────────
 
 
+def get_auth_summary() -> dict:
+    """Auth flags for the dashboard Security card. NEVER includes the secret."""
+    secret_configured = settings.api_secret_key not in {
+        "",
+        "change-me-before-use",
+        "replace-with-output-of-generate-secret-sh",
+    }
+    return {
+        "enabled": settings.enable_auth,
+        "secret_configured": secret_configured,
+        "protect_dashboard": settings.auth_protect_dashboard,
+        "protect_ask": settings.auth_protect_ask,
+        "protect_voice": settings.auth_protect_voice,
+        "protect_mutations": settings.auth_protect_mutations,
+        "session_ttl_minutes": settings.session_ttl_minutes,
+        "cookie_secure": settings.cookie_secure,
+        "host": settings.host,
+        # If the server is bound to 0.0.0.0 without auth, that is a posture
+        # warning the dashboard should surface.
+        "lan_exposed_without_auth": (
+            settings.host in ("0.0.0.0", "::") and not settings.enable_auth
+        ),
+        # If auth is enabled but the secret is unset, fail-closed. Tell the
+        # operator to fix this immediately.
+        "misconfigured": settings.enable_auth and not secret_configured,
+    }
+
+
 def get_voice_summary() -> dict:
     """Voice configuration + last session, if any. Read-only."""
     last_events = audit_reader.read_events_by_types(
@@ -274,6 +302,7 @@ def build_view_model() -> dict:
         "memory_summary": get_memory_summary(),
         "briefing_summary": get_briefing_summary(),
         "llm_summary": get_llm_summary(),
+        "auth_summary": get_auth_summary(),
         "voice_summary": get_voice_summary(),
         "audit_recent": get_audit_recent(),
         "security_events": get_security_events(),

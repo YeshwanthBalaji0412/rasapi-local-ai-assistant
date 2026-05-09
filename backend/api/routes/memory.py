@@ -8,13 +8,17 @@ so both surfaces enforce the same rules.
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from core import memory
+from security import auth as auth_module
 
 
-router = APIRouter(tags=["memory"])
+router = APIRouter(
+    tags=["memory"],
+    dependencies=[Depends(auth_module.require_auth_for_mutations)],
+)
 
 
 class MemoryCreate(BaseModel):
