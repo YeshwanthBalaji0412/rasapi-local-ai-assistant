@@ -1,6 +1,6 @@
 # RasaPi — Local-First Secure AI Assistant on Raspberry Pi 5
 
-[![Phase](https://img.shields.io/badge/phase-8%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-258%2F258-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![Phase](https://img.shields.io/badge/phase-9%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-306%2F306-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 A privacy-preserving AI assistant that runs entirely on a Raspberry Pi 5. No cloud dependency. Secure command execution by default. Built iteratively, phase by phase, so every increment is testable on its own.
 
@@ -39,7 +39,8 @@ This repo is also a recruiter-facing showcase of how to build a **secure** AI sy
 | 5 | ✅ complete | Local web dashboard — server-rendered HTML, no JS framework, no CDN |
 | 6 | ✅ complete | Raspberry Pi deployment — systemd service, install / smoke / backup / restore scripts |
 | 7 | ✅ complete | Voice I/O — push-to-talk, local STT/TTS, no wake word, no cloud speech |
-| 8 | 🟡 in progress | Auth + remote access hardening — API key, dashboard login, CSRF, Tailscale guidance |
+| 8 | ✅ complete | Auth + remote access hardening — API key, dashboard login, CSRF, Tailscale guidance |
+| 9 | 🟡 in progress | Integrations hub — Slack webhook, Home Assistant REST allowlist, Alexa stub |
 
 The deterministic intent router is still the only thing that decides what code path runs. The LLM is text-only. Memory writes go through the router or direct REST endpoints — never the LLM.
 
@@ -52,7 +53,7 @@ The deterministic intent router is still the only thing that decides what code p
 - Safe command execution gated by an allowlist with typed argument validation
 - Structured JSONL audit trail for every request, command, LLM call, and memory event
 - `.env`-based configuration via `pydantic-settings`
-- Full test suite — **258/258 passing** (`pytest`)
+- Full test suite — **306/306 passing** (`pytest`)
 
 **Phase 2 additions (opt-in via `ENABLE_LOCAL_LLM=true`):**
 
@@ -269,6 +270,15 @@ Any briefing that includes USCIS items is appended with:
 | GET | `/briefing/category/{category}` | Items in one category | — | 4 |
 | POST | `/briefing/refresh` | Fetch every source now | — | 4 |
 | GET | `/briefing/sources` | List configured sources + categories | — | 4 |
+| GET | `/integrations` | List integrations + status | — | 9 |
+| GET | `/integrations/status` | Alias of `/integrations` | — | 9 |
+| POST | `/integrations/slack/test` | Send test Slack notification | — | 9 |
+| POST | `/integrations/slack/send-briefing` | Post briefing to Slack | `?category=ai_news` (optional) | 9 |
+| GET | `/integrations/home-assistant/status` | HA reachability check | — | 9 |
+| GET | `/integrations/home-assistant/entities` | List allowed entities | — | 9 |
+| GET | `/integrations/home-assistant/entities/{id}/state` | Read state | — | 9 |
+| POST | `/integrations/home-assistant/entities/{id}/turn-on` | Actuate (light/switch only) | — | 9 |
+| POST | `/integrations/home-assistant/entities/{id}/turn-off` | Actuate (light/switch only) | — | 9 |
 | GET | `/login` | Render the dashboard login form (auth on) | — | 8 |
 | POST | `/login` | Submit the API key, set session cookie | `api_key`, `next` | 8 |
 | POST | `/logout` | Clear session cookie | `_csrf` (when auth on) | 8 |
@@ -394,7 +404,7 @@ cd backend && source .venv/bin/activate
 cd .. && python -m pytest tests/ -v
 ```
 
-Expected: `258 passed`.
+Expected: `306 passed`.
 
 ---
 
@@ -497,6 +507,68 @@ sudo systemctl status rasapi
 > ⚠️ **No public exposure.** Phase 6 has no authentication. The shipped systemd unit binds to `127.0.0.1` (Pi-local only). To reach the dashboard from your MacBook over the home LAN, switch one line to `--host 0.0.0.0` and only do this on a trusted network. Never port-forward to the public internet.
 
 Full guide, troubleshooting, backup/restore, and the optional Ollama appendix: [`deployment/raspberry-pi/setup-pi.md`](deployment/raspberry-pi/setup-pi.md). Cross-environment overview: [`docs/deployment.md`](docs/deployment.md).
+
+---
+
+## Integrations (Phase 9)
+
+Phase 9 adds an **opt-in** integrations layer so RasaPi can talk to a few trusted external systems:
+
+| Integration | Direction | Phase 9 status |
+|---|---|---|
+| **Slack** (incoming webhook) | RasaPi → Slack | ✅ working |
+| **Home Assistant** (REST + long-lived token) | RasaPi → HA | ✅ working with allowlist |
+| **Alexa** | n/a | 🟡 future stub only |
+
+Setup, allowlist details, and audit-event reference: [`deployment/raspberry-pi/integrations.md`](deployment/raspberry-pi/integrations.md).
+
+### What it can do
+
+```bash
+# From the dashboard: click "Send test" or "Send briefing" on the Slack card.
+# From /ask:
+curl -s -X POST http://localhost:8000/ask \
+  -H "X-RasaPi-Key: $YOUR_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"send today'\''s briefing to Slack"}'
+
+curl -s -X POST http://localhost:8000/ask \
+  -H "X-RasaPi-Key: $YOUR_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"turn on desk light"}'
+
+# From REST:
+curl -s -X POST http://localhost:8000/integrations/slack/test \
+  -H "X-RasaPi-Key: $YOUR_KEY"
+
+curl -s -X POST http://localhost:8000/integrations/home-assistant/entities/light.desk_light/turn-on \
+  -H "X-RasaPi-Key: $YOUR_KEY"
+```
+
+### What it deliberately cannot do
+
+- ❌ Post arbitrary user-supplied or LLM-generated text to Slack
+- ❌ Reply to Slack messages or handle slash commands (incoming webhook only)
+- ❌ Call arbitrary Home Assistant services (`scene.activate`, `script.run`, etc.)
+- ❌ Touch hard-blocked HA domains: `lock`, `alarm_control_panel`, `cover`, `camera`, `device_tracker`, `person` — even when added to `HOME_ASSISTANT_ALLOWED_ENTITIES`
+- ❌ Touch any HA entity outside the operator's `HOME_ASSISTANT_ALLOWED_ENTITIES` list (when set)
+- ❌ Generate integration calls from LLM output — the deterministic router is the only path to integration handlers
+
+### Privacy properties
+
+- **Webhook URLs and HA tokens live in `.env` only.** Never in the database, never in API responses, never in audit logs, never in the dashboard. Sentinel tests enforce this.
+- **The dashboard Integrations card** shows enable/configure status, capabilities, allowed-entity counts, and last-event metadata — but never the secret or the configured URL.
+- **All integration endpoints honour Phase 8 auth** via the new `AUTH_PROTECT_INTEGRATIONS` flag (default `true` once `ENABLE_AUTH=true`).
+- **CSRF tokens** are required on dashboard form posts (browser flow) and skipped for header-authenticated API clients.
+
+### Generate the secrets
+
+| Integration | Where to get the secret |
+|---|---|
+| Slack | Slack workspace → Apps → Incoming Webhooks → Add to a workspace, copy the webhook URL |
+| Home Assistant | HA → Profile → Long-Lived Access Tokens → Create Token, copy the value (shown only once) |
+
+Then paste each into `.env` under the matching key, set the `ENABLE_*` flag, `chmod 600 .env`, and `sudo systemctl restart rasapi`.
 
 ---
 
@@ -660,7 +732,8 @@ See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 - **Phase 5** ✅ Local web dashboard
 - **Phase 6** ✅ Raspberry Pi deployment — see [docs/deployment.md](docs/deployment.md)
 - **Phase 7** ✅ Voice I/O — push-to-talk, local STT/TTS
-- **Phase 8** 🟡 Auth + remote-access hardening (in progress) — API key, dashboard login, CSRF, Tailscale guidance
+- **Phase 8** ✅ Auth + remote-access hardening — API key, dashboard login, CSRF, Tailscale guidance
+- **Phase 9** 🟡 Integrations hub (in progress) — Slack webhook, Home Assistant REST allowlist, Alexa stub
 
 ---
 

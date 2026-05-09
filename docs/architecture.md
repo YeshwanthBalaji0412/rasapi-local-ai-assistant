@@ -1,6 +1,6 @@
 # RasaPi — Architecture
 
-This document describes the architecture as it exists in code today (Phases 1–7 complete; Phase 8 in progress). Future phases will extend specific modules without changing existing interfaces.
+This document describes the architecture as it exists in code today (Phases 1–8 complete; Phase 9 in progress). Future phases will extend specific modules without changing existing interfaces.
 
 ---
 
@@ -335,6 +335,52 @@ No server-side session store. Cookie lives for `SESSION_TTL_MINUTES` (default 72
 
 Auth is **disabled by default**. With `ENABLE_AUTH=false`, every dependency is a no-op and the existing local workflow runs unchanged. Tests verify this — all pre-Phase-8 tests pass with auth off.
 
+### Phase 9 — Integrations
+
+Phase 9 adds an opt-in integrations layer with a clear separation
+between the deterministic intent router and the integration adapters:
+
+```
+   user input (text or voice transcript)
+              │
+              ▼
+   orchestration.process_query  →  intent_router.route()
+              │
+              ├──── slack_send_test       → integrations.slack.send_test()
+              ├──── slack_send_briefing   → integrations.slack.send_briefing(category)
+              ├──── ha_status             → integrations.home_assistant.get_status()
+              ├──── ha_turn_on            → integrations.home_assistant.turn_on(entity)
+              └──── ha_turn_off           → integrations.home_assistant.turn_off(entity)
+                                                   │
+                                                   ├── two-layer allowlist check
+                                                   │     1. domain in ALLOWED_DOMAINS
+                                                   │     2. entity_id in ALLOWED_ENTITIES (if set)
+                                                   │     + hard-block list (lock, camera, …)
+                                                   │
+                                                   ├── httpx call with bearer token
+                                                   │     (HA token never returned, never logged)
+                                                   │
+                                                   └── audit log_integration_event
+                                                         (target = entity_id, never URL/token)
+
+
+   Direct REST surface (auth + CSRF when AUTH_PROTECT_INTEGRATIONS=true):
+
+      GET /integrations            → registry list (safe view-models)
+      POST /integrations/slack/*   → CSRF on browser flow, header on API flow
+      GET /integrations/home-assistant/...   → state read
+      POST /integrations/home-assistant/.../turn-on   → action (allowlist enforced)
+```
+
+**Key invariants:**
+
+- The LLM has no path to `integrations.slack` or `integrations.home_assistant`. The intent router is the only entry point. Tests confirm.
+- The Home Assistant adapter never accepts a free-form `service` name — only `turn_on` and `turn_off`, only on `light` and `switch` domains.
+- The Slack adapter never accepts a free-form message body — only the fixed test string or the briefing formatter's output.
+- The token and webhook URL appear nowhere except outbound HTTP request headers/payloads. Sentinel tests in `test_slack_integration.py` and `test_home_assistant_integration.py` plant canary values into settings and assert absence in audit logs and dashboard HTML.
+
+Integration endpoints accept both header auth (API clients) and session-cookie auth (dashboard). The new `verify_csrf_for_api` helper requires a CSRF token only when the request relies on a session cookie — header-authenticated API requests skip CSRF (standard pattern).
+
 The briefing package's outbound network calls go to:
 - the public RSS hosts in `briefing/sources.py` (BBC, NPR, Hugging Face, Google AI Blog, Ars Technica, The Verge, Hacker News mirror, USCIS)
 - `api.open-meteo.com` for weather (no API key)
@@ -540,6 +586,11 @@ If any layer rejects, the audit log records `outcome="rejected"` (or `"error"`) 
 | `security/auth.py` | API-key + session-cookie + CSRF primitives. Stateless, `hmac.compare_digest` everywhere. | config, audit_log |
 | `api/routes/auth.py` | `GET /login`, `POST /login`, `POST /logout` | security.auth, security.audit_log |
 | `templates/login.html` | Single-field login form | — |
+| `integrations/types.py` | `IntegrationEntry`, `IntegrationCapability` dataclasses | — |
+| `integrations/slack.py` | Incoming-webhook client + `/ask` handlers. No bot OAuth, no replies. | config, audit_log, briefing |
+| `integrations/home_assistant.py` | REST client + two-layer allowlist + hard-block list + `/ask` handlers. | config, audit_log |
+| `integrations/registry.py` | Public-facing snapshot of all integrations (no secrets) | integrations.* |
+| `api/routes/integrations.py` | Nine endpoints under `/integrations/*` | integrations.*, security.auth |
 | `security/allowlist.py` | Default-deny command whitelist | — |
 | `security/audit_log.py` | Append-only JSONL event sink | config |
 

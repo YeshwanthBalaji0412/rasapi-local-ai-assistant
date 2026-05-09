@@ -79,6 +79,7 @@ deferred — see [`docs/roadmap.md`](roadmap.md).
 | `audio-setup.md` | Phase 7 — Pi audio devices, espeak/Piper, whisper.cpp, voice CLI smoke |
 | `generate-secret.sh` | Phase 8 — print a 256-bit URL-safe `API_SECRET_KEY` |
 | `remote-access.md` | Phase 8 — Tailscale instead of port-forwarding, optional UFW, hard rules |
+| `integrations.md` | Phase 9 — Slack webhook setup, HA token + allowlist, Alexa future note, hard rules |
 
 ## What `install.sh` will not do
 
@@ -128,7 +129,8 @@ operator-managed configuration.
 ## Future deployment phases
 
 - **Phase 7 ✅ — Voice I/O.** Audio in/out via local Whisper + Piper, all on-device.
-- **Phase 8 🟡 — Auth + remote access (in progress).** API-key + dashboard-login + CSRF + Tailscale guidance. See [`deployment/raspberry-pi/remote-access.md`](../deployment/raspberry-pi/remote-access.md).
-- **Phase 9 (or later) — HTTPS & rate limiting.** Reverse proxy with TLS, brute-force protection, optional Dockerfile, `/metrics`.
+- **Phase 8 ✅ — Auth + remote access.** API-key + dashboard-login + CSRF + Tailscale guidance. See [`deployment/raspberry-pi/remote-access.md`](../deployment/raspberry-pi/remote-access.md).
+- **Phase 9 🟡 — Integrations hub (in progress).** Slack webhook + Home Assistant REST allowlist, Alexa future stub. See [`deployment/raspberry-pi/integrations.md`](../deployment/raspberry-pi/integrations.md).
+- **Phase 10 (or later) — HTTPS & rate limiting.** Reverse proxy with TLS, brute-force protection, optional Dockerfile, `/metrics`.
 
 See [`docs/roadmap.md`](roadmap.md).

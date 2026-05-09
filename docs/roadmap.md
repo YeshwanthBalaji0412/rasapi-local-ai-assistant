@@ -251,7 +251,7 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🟡 Phase 8 — Authentication and Remote-Access Hardening (in progress)
+## ✅ Phase 8 — Authentication and Remote-Access Hardening (complete)
 
 **Goal:** Make remote access safe so the dashboard and API can be exposed beyond the Pi itself. Auth is **opt-in** so the existing local-dev workflow keeps working.
 
@@ -289,6 +289,44 @@ No new features in this phase — only documentation and minor polish.
 - [ ] Optional Dockerfile (`linux/arm64`)
 - [ ] `/metrics` endpoint (Prometheus format)
 - [ ] First-boot wizard that auto-generates the secret + substitutes `<PI_USER>`
+
+---
+
+## 🟡 Phase 9 — Integrations Hub & Secure Notifications (in progress)
+
+**Goal:** Now that auth is in place, add a controlled integrations layer so RasaPi can talk to a few trusted external systems — opt-in, allowlisted, audited. Start with Slack notifications and Home Assistant device control.
+
+**Delivered:**
+
+- [x] `backend/integrations/` package: `types.py`, `slack.py`, `home_assistant.py`, `registry.py`
+- [x] Slack incoming webhook (no bot OAuth) — fixed test message + briefing posting
+- [x] Home Assistant REST + long-lived token — status, list entities, read state, turn on/off
+- [x] Two-layer HA allowlist (domain + entity_id) with non-overridable hard-block list (lock, alarm_control_panel, cover, camera, device_tracker, person)
+- [x] Five new `/ask` intents: `slack_send_test`, `slack_send_briefing`, `ha_status`, `ha_turn_on`, `ha_turn_off`
+- [x] Nine new REST endpoints under `/integrations/*` with `AUTH_PROTECT_INTEGRATIONS` flag
+- [x] CSRF on dashboard form posts (browser flow); skipped for header-authenticated API clients
+- [x] Dashboard "Integrations" card (no secrets, capability tags, last-event metadata)
+- [x] 12 new audit event types via `log_integration_event` — webhook URL and HA token never appear in logs
+- [x] Alexa registry stub with `status: "future"` and a docs pointer
+- [x] `deployment/raspberry-pi/integrations.md` — Slack and HA setup, allowlist explanation, "hard rules"
+- [x] No new pip dependencies (httpx already present)
+- [x] **48 new tests, 306 total passing, 0 regressions** (existing 258 still pass)
+
+**Security invariants enforced in code AND tests:**
+
+- The LLM has no path to integration adapters. `integrations/*.py` is reached only through the deterministic intent router or REST endpoints. Test confirms: an LLM saying "send to Slack" does not call Slack.
+- Slack only posts the fixed test string or briefing-formatter output. There is no API surface for free-form messages.
+- Home Assistant only invokes `turn_on` / `turn_off` (on `light` / `switch`) or state reads. There is no API surface for arbitrary service calls.
+- `lock`, `alarm_control_panel`, `cover`, `camera`, `device_tracker`, `person` domains are always rejected. Operator cannot override the hard-block list via env.
+- Sentinel tests assert webhook URLs and HA tokens never appear in dashboard HTML, audit log entries, or `/integrations/*` JSON responses.
+
+**Reserved for later phases:**
+
+- [ ] Per-category briefing posting via dedicated `slack_send_<category>` intents (currently rolled into `slack_send_briefing` with category detection)
+- [ ] Slack security alert on critical audit events (flag exists; behaviour deferred)
+- [ ] Natural-language sensor reads (`"what's the living room temperature"` → HA state)
+- [ ] Direct Alexa Skill integration after HTTPS / reverse-proxy phase
+- [ ] HA WebSocket subscriptions for live updates
 
 ---
 

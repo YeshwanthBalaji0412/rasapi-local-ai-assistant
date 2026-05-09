@@ -672,6 +672,120 @@ The CSRF cookie is non-HttpOnly so the template can include the token in forms. 
 
 ---
 
+## Integrations (Phase 9)
+
+Phase 9 adds an opt-in integrations layer. Two real integrations (Slack incoming webhook, Home Assistant REST + long-lived token) and one documented stub (Alexa). The trust model is unchanged: integrations are reachable **only** through a hard-coded set of intents and REST endpoints, never via free-form LLM output.
+
+### 1. Secrets live in `.env` only
+
+| Secret | Source | Visibility |
+|---|---|---|
+| `SLACK_WEBHOOK_URL` | `.env` (chmod 600) | sent only as an HTTP request URL to the Slack host. Never returned, never logged, never displayed. |
+| `HOME_ASSISTANT_TOKEN` | `.env` (chmod 600) | sent only in the `Authorization: Bearer …` header to the configured HA host. Never returned, never logged, never displayed. |
+
+Sentinel tests plant canary values into both settings, run a Slack/HA call (mocked), and assert the canary value never appears in:
+- API responses (`/integrations/*`, `/dashboard`, `/voice/status`)
+- Audit log files (`audit-*.jsonl`)
+- Dashboard HTML
+
+### 2. Allowlists, not denylists
+
+Home Assistant uses a two-layer allowlist:
+
+```
+   incoming entity_id (e.g. "light.desk_light")
+            │
+            ▼
+   1. domain in HOME_ASSISTANT_ALLOWED_DOMAINS  AND
+      domain not in HARD_BLOCK_DOMAINS  ◄── always rejected
+            │
+            ▼
+   2. entity_id in HOME_ASSISTANT_ALLOWED_ENTITIES
+      (if list is non-empty; empty list = any entity in allowed domain)
+            │
+            ▼
+   3. method check (turn_on / turn_off only on light, switch)
+            │
+            ▼
+   call Home Assistant
+```
+
+`HARD_BLOCK_DOMAINS = {lock, alarm_control_panel, cover, camera, device_tracker, person}` is **enforced inside the Home Assistant module** — operator cannot override it via env. Test plants `lock.front_door` in `HOME_ASSISTANT_ALLOWED_ENTITIES` and verifies rejection with `home_assistant_action_blocked` audit event.
+
+Climate stays off the default allowlist. An operator must explicitly add `climate` to `HOME_ASSISTANT_ALLOWED_DOMAINS` to control thermostats.
+
+### 3. No arbitrary Slack messages
+
+The Slack module exposes exactly two send methods:
+
+```python
+slack.send_test(request_id)             # fixed test string
+slack.send_briefing(request_id, cat)   # uses briefing.formatter output
+```
+
+There is no endpoint or intent that accepts a free-form `message=...` parameter. The LLM cannot synthesize a Slack post.
+
+### 4. No arbitrary Home Assistant service calls
+
+The HA module exposes exactly four call methods: `get_status`, `list_entities`, `read_state`, and a private `_service_call` that only ever invokes `turn_on` or `turn_off`. There is no endpoint or intent that accepts a free-form `service=...` parameter. The LLM cannot synthesize an HA call.
+
+### 5. LLM cannot trigger integrations
+
+Integration handlers are reached only via the deterministic router. `process_query` never returns LLM-generated text to the integration adapters. Test plants an LLM that says *"I'll send that to Slack for you!"* and verifies no Slack call is made. The LLM only ever produces a response string in the conversational fallback path.
+
+### 6. Auth and CSRF
+
+A new `AUTH_PROTECT_INTEGRATIONS=true` flag (default on when auth is on) gates every `/integrations/*` endpoint. The router uses the new `verify_csrf_for_api` helper for POST endpoints:
+
+- API clients with `X-RasaPi-Key` or `Authorization: Bearer` skip CSRF (standard pattern — no browser flow)
+- Browser sessions (cookie-only) require a matching `_csrf` token in the form body
+
+CSRF mismatch → 403 + `csrf_validation_failed` audit (existing Phase 8 mechanism).
+
+### 7. Audit log records action, never secret
+
+12 new audit event types via `log_integration_event`:
+
+```
+integration_status_viewed
+slack_test_sent / slack_test_failed
+slack_briefing_sent / slack_briefing_failed
+home_assistant_status_checked
+home_assistant_entity_listed
+home_assistant_state_read
+home_assistant_action_requested
+home_assistant_action_completed
+home_assistant_action_blocked
+integration_secret_missing
+integration_auth_required
+```
+
+Each entry records `request_id`, `event_type`, `outcome`, optional `integration` ("slack" | "home_assistant"), optional `target` (entity_id, never URL/token), and optional `reason`. Tokens and webhook URLs are **structurally impossible** to leak: the method signature does not accept a secret parameter, and tests assert absence of canary values in log files.
+
+### 8. Alexa stays a stub
+
+`alexa_future_stub` appears in the registry with `status: "future"` and a docs pointer to `deployment/raspberry-pi/integrations.md`. There is no code path, no endpoint, no intent. Direct Alexa integration would require:
+
+- A public HTTPS endpoint (out of scope; we don't expose to the public internet)
+- An Alexa Skill in the Developer Console
+- OAuth account linking
+
+The recommended future path is RasaPi → Home Assistant → Alexa-compatible devices, which keeps RasaPi off Amazon's cloud and inside the Phase 9 HA allowlist.
+
+### Out of scope for Phase 9 (deliberately)
+
+- ❌ Slack bot OAuth, slash commands, replies
+- ❌ Slack channel listing
+- ❌ HA service calls outside `turn_on` / `turn_off`
+- ❌ HA configuration mutation (`/api/config/*`)
+- ❌ HA WebSocket subscriptions
+- ❌ Direct Alexa Skill integration
+- ❌ Cloud LLM fallback for integration intents
+- ❌ Integration secrets stored in DB
+- ❌ Per-user integration settings (single-user model)
+
+---
+
 ## Audit logging behaviour
 
 Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD.jsonl`. Files rotate daily. Entries are append-only and never modified after writing.
@@ -705,6 +819,14 @@ Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD
 | `auth_invalid_key` | Header credential present but wrong | `timestamp`, `request_id`, `reason="invalid_key"`. Never includes the bad key. |
 | `csrf_validation_failed` | Dashboard POST with missing or mismatched CSRF token | `timestamp`, `request_id`, `reason="csrf_mismatch"` |
 | `protected_route_accessed` | Protected API call passed auth | `timestamp`, `request_id`, `outcome="success"` |
+| `integration_status_viewed` | `GET /integrations` rendered | `timestamp`, `request_id`, `outcome="success"` |
+| `slack_test_sent` / `slack_test_failed` | Slack test post lifecycle | `timestamp`, `request_id`, `integration="slack"`, `outcome`, optional `reason` (`not_configured`, `timeout`, `http_<code>`). **Never** the webhook URL. |
+| `slack_briefing_sent` / `slack_briefing_failed` | Slack briefing post lifecycle | as above with `target="daily"` or `target="category:<name>"` |
+| `home_assistant_status_checked` | HA `/api/` call | `integration="home_assistant"`, `outcome` |
+| `home_assistant_entity_listed` | HA `/api/states` call | as above |
+| `home_assistant_state_read` | HA `/api/states/<id>` call | as above with `target=entity_id` |
+| `home_assistant_action_requested` / `home_assistant_action_completed` | turn_on / turn_off lifecycle | `target=entity_id`, `reason=action`, **never** the token |
+| `home_assistant_action_blocked` | Allowlist or hard-block list rejected an entity | `target=entity_id`, `reason` (`hard_blocked_domain:<d>`, `domain_not_allowed:<d>`, `entity_not_in_allowlist`) |
 
 ### Example entry
 

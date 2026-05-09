@@ -742,6 +742,133 @@ python -m pytest tests/ -v
 
 ---
 
+## Phase 9 — integrations screenshots
+
+These prove the Slack + Home Assistant integrations work end-to-end with proper safety controls. Capture with `ENABLE_AUTH=true` so the protected paths are visible.
+
+### P9-1. /integrations status
+**File:** `docs/images/p9-01-integrations-list.png`
+
+```bash
+curl -s http://<pi-ip>:8000/integrations \
+  -H "X-RasaPi-Key: $YOUR_KEY" | python3 -m json.tool
+```
+
+**Expected:** JSON listing all three integrations (slack, home_assistant, alexa_future_stub) with `enabled`, `configured`, `status`, capabilities. **No** webhook URL or HA token visible.
+
+### P9-2. Dashboard Integrations card
+**File:** `docs/images/p9-02-dashboard-integrations.png`
+
+Open `/dashboard` and crop the **Integrations** section. Capture both the "disabled" state and (after configuring) the "ready" state with action buttons.
+
+### P9-3. Slack disabled — safe response
+**File:** `docs/images/p9-03-slack-disabled.png`
+
+Without `ENABLE_SLACK=true`:
+
+```bash
+curl -i -X POST http://<pi-ip>:8000/integrations/slack/test \
+  -H "X-RasaPi-Key: $YOUR_KEY"
+```
+
+**Expected:** HTTP 409 with `"detail": "Slack is not enabled or SLACK_WEBHOOK_URL is empty."`.
+
+### P9-4. Slack test notification
+**File:** `docs/images/p9-04-slack-test.png`
+
+Configure `SLACK_WEBHOOK_URL` in `.env`, restart, then click **Send test** on the dashboard or:
+
+```bash
+curl -X POST http://<pi-ip>:8000/integrations/slack/test \
+  -H "X-RasaPi-Key: $YOUR_KEY"
+```
+
+**Expected:** Slack channel receives the test message. Capture both the curl output and the Slack message side by side.
+
+### P9-5. Send briefing to Slack
+**File:** `docs/images/p9-05-slack-briefing.png`
+
+```bash
+curl -s -X POST http://<pi-ip>:8000/ask \
+  -H "X-RasaPi-Key: $YOUR_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"send today'\''s briefing to Slack"}' | python3 -m json.tool
+```
+
+**Expected:** `intent: "slack_send_briefing"` and the formatted briefing visible in Slack.
+
+### P9-6. Home Assistant status
+**File:** `docs/images/p9-06-ha-status.png`
+
+After configuring HA URL + token in `.env` and restarting:
+
+```bash
+curl -s http://<pi-ip>:8000/integrations/home-assistant/status \
+  -H "X-RasaPi-Key: $YOUR_KEY" | python3 -m json.tool
+```
+
+**Expected:** `{"reachable": true, "version": "..."}`.
+
+### P9-7. Allowed entity list
+**File:** `docs/images/p9-07-ha-entities.png`
+
+```bash
+curl -s http://<pi-ip>:8000/integrations/home-assistant/entities \
+  -H "X-RasaPi-Key: $YOUR_KEY" | python3 -m json.tool
+```
+
+**Expected:** Only entities matching `HOME_ASSISTANT_ALLOWED_ENTITIES` (and within allowed domains).
+
+### P9-8. Turn on a light
+**File:** `docs/images/p9-08-ha-turn-on.png`
+
+```bash
+curl -X POST http://<pi-ip>:8000/integrations/home-assistant/entities/light.desk_light/turn-on \
+  -H "X-RasaPi-Key: $YOUR_KEY"
+
+# Or via /ask:
+curl -X POST http://<pi-ip>:8000/ask \
+  -H "X-RasaPi-Key: $YOUR_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"turn on desk light"}'
+```
+
+**Expected:** Light turns on; `home_assistant_action_completed` audit event logged.
+
+### P9-9. Blocked entity rejected (the linchpin)
+**File:** `docs/images/p9-09-ha-blocked.png`
+
+Even if `HOME_ASSISTANT_ALLOWED_ENTITIES` includes `lock.front_door`:
+
+```bash
+curl -i -X POST http://<pi-ip>:8000/integrations/home-assistant/entities/lock.front_door/turn-on \
+  -H "X-RasaPi-Key: $YOUR_KEY"
+```
+
+**Expected:** HTTP 400 with `"entity blocked: hard_blocked_domain:lock"`. Capture the response and a `tail` of the audit log showing `home_assistant_action_blocked`.
+
+### P9-10. Auth required for integration endpoints
+**File:** `docs/images/p9-10-auth-required.png`
+
+```bash
+# Without API key when auth is on:
+curl -i http://<pi-ip>:8000/integrations
+```
+
+**Expected:** HTTP 401.
+
+### P9-11. Tests passing (306/306)
+**File:** `docs/images/p9-11-tests-306.png`
+
+```bash
+cd backend && source .venv/bin/activate && cd ..
+python -m pytest tests/ -v
+```
+
+**Expected:** Final line `======= 306 passed in <time> =======`.
+
+---
+
 ## Optional bonus screenshots
 
 These aren't required but strengthen the story:
