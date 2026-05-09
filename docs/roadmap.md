@@ -212,7 +212,7 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🟡 Phase 7 — Voice I/O (in progress)
+## ✅ Phase 7 — Voice I/O (complete)
 
 **Goal:** Add a local push-to-talk voice interface. No wake word, no always-listening mode, no cloud speech, no audio leaving the device. Voice is a thin record/STT/TTS shell around the existing `/ask` orchestration.
 
@@ -251,21 +251,44 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🔮 Phase 8 — Authentication and Remote-Access Hardening
+## 🟡 Phase 8 — Authentication and Remote-Access Hardening (in progress)
 
-**Goal:** Make remote access safe so the dashboard can be exposed beyond the Pi-local default.
+**Goal:** Make remote access safe so the dashboard and API can be exposed beyond the Pi itself. Auth is **opt-in** so the existing local-dev workflow keeps working.
 
-**Planned (none of this exists yet):**
+**Delivered:**
 
-- [ ] Authentication: API key header for `/ask` and `/dashboard`; or session cookies for the dashboard
-- [ ] HTTPS termination via a documented reverse proxy (Caddy or nginx)
-- [ ] CSRF tokens on dashboard form-POST endpoints
-- [ ] Tailscale/WireGuard install patterns documented and optionally automated
-- [ ] Firewall sample (`ufw`) with explicit rules
-- [ ] Log rotation via `logrotate` for audit JSONL files
-- [ ] Optional Dockerfile (`linux/arm64`) for users who prefer containers
-- [ ] `/metrics` endpoint (Prometheus format) for monitoring
-- [ ] First-boot wizard that generates `API_SECRET_KEY` and substitutes `<PI_USER>` in the systemd unit automatically
+- [x] `backend/security/auth.py` — stateless signed session cookies (HMAC-SHA256), `verify_api_key`, double-submit-cookie CSRF, FastAPI dependencies, no new pip dependencies
+- [x] API-key authentication via `X-RasaPi-Key` header OR `Authorization: Bearer <secret>`
+- [x] `/login` GET form + `POST /login` + `POST /logout`, signed session cookies
+- [x] CSRF tokens (double-submit) on every dashboard form POST
+- [x] Open-redirect protection on `?next=` parameter
+- [x] Fail-closed when `ENABLE_AUTH=true` and `API_SECRET_KEY` is empty/placeholder (503 + audit)
+- [x] Per-flag protection: `AUTH_PROTECT_DASHBOARD`, `AUTH_PROTECT_ASK`, `AUTH_PROTECT_VOICE`, `AUTH_PROTECT_MUTATIONS`
+- [x] `/health`, `/commands`, `/dashboard/health`, `/briefing/*` stay public always
+- [x] Dashboard "Security" card showing flag status (never the secret)
+- [x] LAN-without-auth warning banner on the dashboard
+- [x] 7 new audit event types via `log_auth_event` — secrets are never written to the log
+- [x] `deployment/raspberry-pi/generate-secret.sh` — prints a 256-bit URL-safe token, never writes `.env`
+- [x] `deployment/raspberry-pi/remote-access.md` — Tailscale-over-port-forwarding guide, optional UFW rules
+- [x] **41 new tests, 258 total passing, 0 regressions** (existing 217 still pass with auth off)
+
+**Security invariants enforced in code AND tests:**
+
+- `hmac.compare_digest` everywhere — no `==` against the configured secret. AST-checked.
+- The configured `API_SECRET_KEY` value never appears in dashboard HTML, `/voice/status`, or any audit log entry. Sentinel tests enforce this.
+- When auth is disabled, every dependency is a no-op — existing tests pass with zero modifications.
+- Dashboard mutations require both a valid session cookie and a matching CSRF token when auth is on.
+- Auth misconfiguration (enabled + placeholder secret) fails closed with 503, never accepts requests "anyway".
+- Briefing endpoints stay public — they only serve public-source RSS/weather data.
+
+**Reserved for later phases:**
+
+- [ ] HTTPS / TLS termination (Phase 9 candidate — Caddy or nginx reverse proxy)
+- [ ] Rate limiting / brute-force protection
+- [ ] Tailscale ACL automation
+- [ ] Optional Dockerfile (`linux/arm64`)
+- [ ] `/metrics` endpoint (Prometheus format)
+- [ ] First-boot wizard that auto-generates the secret + substitutes `<PI_USER>`
 
 ---
 

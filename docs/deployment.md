@@ -46,7 +46,7 @@ local-network service.
 
 ## Trust model
 
-Phase 6 has **no authentication**. The trust model is:
+Phase 6 ships RasaPi with no authentication; Phase 8 adds an opt-in API-key + dashboard-login layer. The trust model is:
 
 - **127.0.0.1 binding (default):** only processes on the Pi itself can
   reach the dashboard. Effectively a single-user local tool.
@@ -56,6 +56,13 @@ Phase 6 has **no authentication**. The trust model is:
 
 Future authentication, HTTPS, and remote access (e.g. Tailscale) are
 deferred — see [`docs/roadmap.md`](roadmap.md).
+
+> **Phase 8 update.** Authentication is now available as an opt-in feature.
+> Generate a secret with `bash deployment/raspberry-pi/generate-secret.sh`,
+> set `ENABLE_AUTH=true` in `.env`, and follow
+> [`deployment/raspberry-pi/remote-access.md`](../deployment/raspberry-pi/remote-access.md)
+> for safe LAN/Tailscale exposure. Public-internet port forwarding remains a
+> hard "no" regardless of auth state.
 
 ## Files shipped in `deployment/raspberry-pi/`
 
@@ -69,6 +76,9 @@ deferred — see [`docs/roadmap.md`](roadmap.md).
 | `backup.sh` | Timestamped copy of `rasapi.db` + audit logs. Excludes `.env`. |
 | `restore.sh` | Restore from a backup directory. Never touches `.env`. |
 | `troubleshooting.md` | Common issues: service won't start, port in use, permission errors, briefing source failures, slow Ollama |
+| `audio-setup.md` | Phase 7 — Pi audio devices, espeak/Piper, whisper.cpp, voice CLI smoke |
+| `generate-secret.sh` | Phase 8 — print a 256-bit URL-safe `API_SECRET_KEY` |
+| `remote-access.md` | Phase 8 — Tailscale instead of port-forwarding, optional UFW, hard rules |
 
 ## What `install.sh` will not do
 
@@ -117,9 +127,8 @@ operator-managed configuration.
 
 ## Future deployment phases
 
-- **Phase 7 — Voice I/O.** Audio in/out via local Whisper + Piper, all
-  on-device.
-- **Phase 8 (or later) — Hardening.** Authentication, HTTPS via reverse
-  proxy, container option, Tailscale/Cloudflare-Tunnel patterns.
+- **Phase 7 ✅ — Voice I/O.** Audio in/out via local Whisper + Piper, all on-device.
+- **Phase 8 🟡 — Auth + remote access (in progress).** API-key + dashboard-login + CSRF + Tailscale guidance. See [`deployment/raspberry-pi/remote-access.md`](../deployment/raspberry-pi/remote-access.md).
+- **Phase 9 (or later) — HTTPS & rate limiting.** Reverse proxy with TLS, brute-force protection, optional Dockerfile, `/metrics`.
 
 See [`docs/roadmap.md`](roadmap.md).

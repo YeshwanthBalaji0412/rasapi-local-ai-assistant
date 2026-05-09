@@ -640,6 +640,108 @@ python -m pytest tests/ -v
 
 ---
 
+## Phase 8 — auth screenshots
+
+These prove auth + CSRF + remote-access guidance work end-to-end. Capture with `ENABLE_AUTH=true` and a real `API_SECRET_KEY` set in `.env`.
+
+### P8-1. Auth-disabled local mode still works
+**File:** `docs/images/p8-01-auth-off.png`
+
+Set `ENABLE_AUTH=false`, restart, then:
+
+```bash
+curl -s http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"hello"}' | python3 -m json.tool
+```
+
+**Expected:** 200, identical to pre-Phase-8 behaviour. Captures the no-regression promise.
+
+### P8-2. Generate a fresh secret
+**File:** `docs/images/p8-02-generate-secret.png`
+
+```bash
+bash deployment/raspberry-pi/generate-secret.sh
+```
+
+**Expected:** A single ~43-character URL-safe token printed. Capture so the demo shows you didn't make up the key.
+
+### P8-3. Dashboard redirects to /login
+**File:** `docs/images/p8-03-login-redirect.png`
+
+Set `ENABLE_AUTH=true` with the new secret, restart, then in your browser:
+
+```
+http://<pi-ip>:8000/dashboard
+```
+
+**Expected:** Redirected to `/login`. Capture the URL bar showing `/login?next=/dashboard` and the login form.
+
+### P8-4. Login success
+**File:** `docs/images/p8-04-login-success.png`
+
+Paste the API key, submit. Capture the resulting authenticated dashboard with the **Sign out** button visible in the top bar.
+
+### P8-5. /ask without key returns 401
+**File:** `docs/images/p8-05-ask-401.png`
+
+```bash
+curl -i http://<pi-ip>:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"hello"}'
+```
+
+**Expected:** `HTTP/1.1 401 Unauthorized`.
+
+### P8-6. /ask with X-RasaPi-Key works
+**File:** `docs/images/p8-06-ask-with-key.png`
+
+```bash
+curl -s http://<pi-ip>:8000/ask \
+  -H "X-RasaPi-Key: $YOUR_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"hello"}' | python3 -m json.tool
+```
+
+**Expected:** 200 + greeting response. Pair with P8-5 to show the auth boundary.
+
+### P8-7. Voice protected
+**File:** `docs/images/p8-07-voice-401.png`
+
+```bash
+curl -i -X POST http://<pi-ip>:8000/voice/session-once
+# 401
+
+curl -s -X POST http://<pi-ip>:8000/voice/session-once \
+  -H "X-RasaPi-Key: $YOUR_KEY" | python3 -m json.tool
+# 200
+```
+
+### P8-8. CSRF on dashboard form
+**File:** `docs/images/p8-08-csrf.png`
+
+After signing in, click **Refresh briefing** and **Complete** on a task. Capture network panel (F12) showing the `_csrf` form field and `rasapi_csrf` cookie. Optionally show a manual `curl -X POST` without the token returning 403.
+
+### P8-9. Sign out
+**File:** `docs/images/p8-09-logout.png`
+
+Click **Sign out** in the dashboard top bar. Capture the redirect back to `/login`. Confirm the session cookie is gone (browser dev tools).
+
+### P8-10. Tailscale guidance
+**File:** `docs/images/p8-10-tailscale-doc.png`
+
+A screenshot of `deployment/raspberry-pi/remote-access.md` rendered on GitHub showing the Tailscale section and the "Hard rules" footer.
+
+### P8-11. Tests passing (258/258)
+**File:** `docs/images/p8-11-tests-258.png`
+
+```bash
+cd backend && source .venv/bin/activate && cd ..
+python -m pytest tests/ -v
+```
+
+**Expected:** Final line `======= 258 passed in <time> =======`.
+
+---
+
 ## Optional bonus screenshots
 
 These aren't required but strengthen the story:

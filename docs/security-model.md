@@ -602,6 +602,76 @@ These are tracked in `docs/roadmap.md`.
 
 ---
 
+## Authentication & remote access (Phase 8)
+
+Phase 8 adds an **opt-in** auth layer. The default posture is unchanged: `ENABLE_AUTH=false`, every dependency is a no-op, the existing local-dev workflow runs as before.
+
+### 1. Single shared secret, constant-time compared
+
+`API_SECRET_KEY` is the only credential. It authenticates both API clients (via `X-RasaPi-Key` header or `Authorization: Bearer`) and browser sessions (via the dashboard login form). All comparisons use `hmac.compare_digest` — no `==` against `settings.api_secret_key`. A test inspects `auth.py` source to enforce this.
+
+### 2. Stateless signed session cookies
+
+```
+cookie = base64url(json{"exp": <unix-ts>, "v": 1})
+       + "."
+       + base64url(hmac_sha256(api_secret_key, payload))
+```
+
+Properties:
+- No server-side session store. Survives restarts.
+- TTL baked into the payload (default 720 minutes / 12 hours).
+- HMAC over the secret means an attacker who doesn't know `API_SECRET_KEY` cannot forge a cookie.
+- Cookie attributes: `HttpOnly; SameSite=Lax; Path=/`. `Secure=false` by default (documented as `Secure=true` once HTTPS is added).
+- **Revocation:** rotate `API_SECRET_KEY` to invalidate every active cookie instantly.
+
+### 3. Fail-closed when misconfigured
+
+If `ENABLE_AUTH=true` but `API_SECRET_KEY` is empty or the placeholder, every protected route returns **503 "auth misconfigured"** and audits `auth_required_missing` with `reason="auth_misconfigured"`. `/health` and `/login` remain reachable so the operator can diagnose.
+
+### 4. Double-submit-cookie CSRF
+
+```
+GET /dashboard
+  └── set rasapi_csrf cookie (random 32-byte token) if missing
+  └── render template with hidden <input name="_csrf" value="{{ csrf_token }}">
+
+POST /dashboard/...
+  └── if ENABLE_AUTH=false: skip (preserve local-dev workflow)
+  └── if ENABLE_AUTH=true:
+       cookie = request.cookies["rasapi_csrf"]
+       form   = (await request.body()) → parse_qs → "_csrf"
+       if not hmac.compare_digest(cookie, form):
+           audit csrf_validation_failed
+           403
+```
+
+The CSRF cookie is non-HttpOnly so the template can include the token in forms. There is no JavaScript on the dashboard, so the cookie value is never read by client-side code. An attacker on a foreign origin cannot read the cookie (same-site protection) and therefore cannot forge a matching form value.
+
+### 5. Open-redirect protection on `?next=`
+
+`/login` accepts an optional `next` query/form parameter for return-after-login. `safe_next_url(...)` rejects any value that doesn't start with `/`, contains `://`, or starts with `//`. Tests for `next=https://evil.com` and `next=//evil.com` confirm the redirect goes to `/dashboard` instead.
+
+### 6. The shared secret never appears anywhere
+
+| Location | Test |
+|---|---|
+| Dashboard HTML | `test_security_card_does_not_leak_api_key` plants the configured key into a request, fetches `/dashboard`, asserts absence |
+| `/voice/status` JSON | `test_voice_status_does_not_leak_api_key` |
+| Audit log | `log_auth_event` accepts only `event_type`, `outcome`, optional `reason`. Failed-login events use `reason="bad_key"` — no key value. |
+| Login form error message | Error text is a fixed string ("Invalid key. Try again.") — never echoes user input |
+
+### 7. Out of scope (deliberately, until later phases)
+
+- ❌ HTTPS / TLS termination — use Tailscale for transport encryption (Phase 9 may add reverse-proxy patterns)
+- ❌ Rate limiting / brute-force protection — Phase 9+. Mitigated by 256-bit key strength.
+- ❌ Multi-user accounts / OAuth / OIDC — single shared secret only
+- ❌ Server-side session revocation mid-TTL — rotate `API_SECRET_KEY` instead
+- ❌ Public internet exposure — never appropriate for RasaPi
+- ❌ Tailscale install automation — operator decision; documented in `deployment/raspberry-pi/remote-access.md`
+
+---
+
 ## Audit logging behaviour
 
 Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD.jsonl`. Files rotate daily. Entries are append-only and never modified after writing.
@@ -628,6 +698,13 @@ Every relevant event is appended as a single JSON line to `logs/audit-YYYY-MM-DD
 | `dashboard_briefing_refresh_requested` | Refresh button clicked from dashboard | `timestamp`, `request_id`. Underlying briefing events are also logged. |
 | `dashboard_task_completed` | Complete-task button clicked from dashboard | `timestamp`, `request_id`, `outcome` (`success`/`error`), `reason` (when error). The underlying `task_completed` event is also logged. |
 | `voice_session_started` / `voice_recording_completed` / `voice_transcription_completed` / `voice_tts_completed` / `voice_session_completed` / `voice_session_failed` | Voice session lifecycle | `timestamp`, `request_id`, `outcome`, optional `stt_engine` / `tts_engine` / `duration_ms` / `transcript_length` / `audio_saved` / `reason`. **Never** contains audio bytes, file paths, or transcript content. |
+| `auth_login_success` | Successful login on `/login` | `timestamp`, `request_id`, `outcome="success"` |
+| `auth_login_failed` | Login attempt rejected | `timestamp`, `request_id`, `outcome="error"`, `reason` (`"bad_key"` or `"auth_misconfigured"`). The submitted key is **never** stored. |
+| `auth_logout` | `/logout` invoked | `timestamp`, `request_id`, `outcome="success"` |
+| `auth_required_missing` | Protected route reached with no credentials | `timestamp`, `request_id`, `reason` (`"no_credentials"`, `"auth_misconfigured"`, `"dashboard_no_session"`) |
+| `auth_invalid_key` | Header credential present but wrong | `timestamp`, `request_id`, `reason="invalid_key"`. Never includes the bad key. |
+| `csrf_validation_failed` | Dashboard POST with missing or mismatched CSRF token | `timestamp`, `request_id`, `reason="csrf_mismatch"` |
+| `protected_route_accessed` | Protected API call passed auth | `timestamp`, `request_id`, `outcome="success"` |
 
 ### Example entry
 

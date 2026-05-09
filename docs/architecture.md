@@ -1,6 +1,6 @@
 # RasaPi — Architecture
 
-This document describes the architecture as it exists in code today (Phases 1–6 complete; Phase 7 in progress). Future phases will extend specific modules without changing existing interfaces.
+This document describes the architecture as it exists in code today (Phases 1–7 complete; Phase 8 in progress). Future phases will extend specific modules without changing existing interfaces.
 
 ---
 
@@ -280,6 +280,61 @@ Voice is **opt-in** (`ENABLE_VOICE=false` default). The `rasapi.service`
 unit is unchanged in Phase 7; voice is exercised via CLI or REST, not by a
 new daemon.
 
+### Phase 8 — Auth layer
+
+Phase 8 wraps the existing routes in an opt-in auth layer. No business
+logic changed; routes gained a `Depends(...)` line.
+
+```
+   API client (curl, etc.)        Browser
+      │                              │
+      │  X-RasaPi-Key: …             │  (no key, no cookie)
+      │  Authorization: Bearer …     │
+      │                              ▼
+      │                       GET /dashboard
+      │                              │
+      │                       not authenticated?
+      │                              │
+      │                       302 → /login
+      │                              │
+      │                       POST /login (api_key)
+      │                              │
+      │                       hmac.compare_digest(...)  ──ok──► Set-Cookie
+      │                                                          (signed,
+      │                                                           HttpOnly,
+      │                                                           SameSite=Lax)
+      ▼                                                          │
+   require_auth_for_*  ─────────────────────────────────────────►│
+   dependency:                                                   │
+   - read X-RasaPi-Key OR Authorization Bearer                   │
+   - if absent, read session cookie (signed)                     │
+   - hmac.compare_digest(...)                                    │
+                                                                 │
+   ok? → continue to route body  ◄──────────────────────────────┘
+   no? → audit + 401 (API) or 302 → /login (browser)
+
+
+   Dashboard form POST
+      │
+      │  hidden _csrf input  +  rasapi_csrf cookie (double-submit)
+      ▼
+   verify_csrf:
+      hmac.compare_digest(form["_csrf"], cookie["rasapi_csrf"])
+   ok? → process; no? → 403 + csrf_validation_failed audit
+```
+
+Session cookies are **stateless and signed**:
+
+```
+cookie = base64url(json{"exp": <unix-ts>, "v": 1})
+       + "."
+       + base64url(hmac_sha256(api_secret_key, payload))
+```
+
+No server-side session store. Cookie lives for `SESSION_TTL_MINUTES` (default 720). Rotating `API_SECRET_KEY` invalidates every existing cookie immediately.
+
+Auth is **disabled by default**. With `ENABLE_AUTH=false`, every dependency is a no-op and the existing local workflow runs unchanged. Tests verify this — all pre-Phase-8 tests pass with auth off.
+
 The briefing package's outbound network calls go to:
 - the public RSS hosts in `briefing/sources.py` (BBC, NPR, Hugging Face, Google AI Blog, Ars Technica, The Verge, Hacker News mirror, USCIS)
 - `api.open-meteo.com` for weather (no API key)
@@ -482,6 +537,9 @@ If any layer rejects, the audit log records `outcome="rejected"` (or `"error"`) 
 | `voice/session.py` | Push-to-talk orchestration. Calls `orchestration.process_query`. Does NOT import subprocess, command_runner, or local_llm. | config, orchestration, recorder, stt, tts, audit_log |
 | `voice/cli.py` | argparse entry point: `python -m voice.cli {status, record-test, stt-test, tts-test, once}` | config, voice.* |
 | `api/routes/voice.py` | `GET /voice/status`, `POST /voice/test-tts`, `POST /voice/session-once` | config, voice.session, voice.tts |
+| `security/auth.py` | API-key + session-cookie + CSRF primitives. Stateless, `hmac.compare_digest` everywhere. | config, audit_log |
+| `api/routes/auth.py` | `GET /login`, `POST /login`, `POST /logout` | security.auth, security.audit_log |
+| `templates/login.html` | Single-field login form | — |
 | `security/allowlist.py` | Default-deny command whitelist | — |
 | `security/audit_log.py` | Append-only JSONL event sink | config |
 

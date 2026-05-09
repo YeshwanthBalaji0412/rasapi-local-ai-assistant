@@ -1,6 +1,6 @@
 # RasaPi — Local-First Secure AI Assistant on Raspberry Pi 5
 
-[![Phase](https://img.shields.io/badge/phase-7%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-217%2F217-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![Phase](https://img.shields.io/badge/phase-8%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-258%2F258-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 A privacy-preserving AI assistant that runs entirely on a Raspberry Pi 5. No cloud dependency. Secure command execution by default. Built iteratively, phase by phase, so every increment is testable on its own.
 
@@ -38,7 +38,8 @@ This repo is also a recruiter-facing showcase of how to build a **secure** AI sy
 | 4 | ✅ complete | Daily intelligence briefing — RSS + Open-Meteo, all local, no API keys |
 | 5 | ✅ complete | Local web dashboard — server-rendered HTML, no JS framework, no CDN |
 | 6 | ✅ complete | Raspberry Pi deployment — systemd service, install / smoke / backup / restore scripts |
-| 7 | 🟡 in progress | Voice I/O — push-to-talk, local STT/TTS, no wake word, no cloud speech |
+| 7 | ✅ complete | Voice I/O — push-to-talk, local STT/TTS, no wake word, no cloud speech |
+| 8 | 🟡 in progress | Auth + remote access hardening — API key, dashboard login, CSRF, Tailscale guidance |
 
 The deterministic intent router is still the only thing that decides what code path runs. The LLM is text-only. Memory writes go through the router or direct REST endpoints — never the LLM.
 
@@ -51,7 +52,7 @@ The deterministic intent router is still the only thing that decides what code p
 - Safe command execution gated by an allowlist with typed argument validation
 - Structured JSONL audit trail for every request, command, LLM call, and memory event
 - `.env`-based configuration via `pydantic-settings`
-- Full test suite — **217/217 passing** (`pytest`)
+- Full test suite — **258/258 passing** (`pytest`)
 
 **Phase 2 additions (opt-in via `ENABLE_LOCAL_LLM=true`):**
 
@@ -268,6 +269,9 @@ Any briefing that includes USCIS items is appended with:
 | GET | `/briefing/category/{category}` | Items in one category | — | 4 |
 | POST | `/briefing/refresh` | Fetch every source now | — | 4 |
 | GET | `/briefing/sources` | List configured sources + categories | — | 4 |
+| GET | `/login` | Render the dashboard login form (auth on) | — | 8 |
+| POST | `/login` | Submit the API key, set session cookie | `api_key`, `next` | 8 |
+| POST | `/logout` | Clear session cookie | `_csrf` (when auth on) | 8 |
 | GET | `/voice/status` | Voice configuration snapshot | — | 7 |
 | POST | `/voice/test-tts` | Speak the given text via configured TTS engine | `{"text":"..."}` | 7 |
 | POST | `/voice/session-once` | One push-to-talk cycle (record → STT → /ask → TTS) | — | 7 |
@@ -390,7 +394,7 @@ cd backend && source .venv/bin/activate
 cd .. && python -m pytest tests/ -v
 ```
 
-Expected: `217 passed`.
+Expected: `258 passed`.
 
 ---
 
@@ -496,6 +500,84 @@ Full guide, troubleshooting, backup/restore, and the optional Ollama appendix: [
 
 ---
 
+## Authentication & remote access (Phase 8)
+
+Phase 8 adds **opt-in** API-key + dashboard-login auth so RasaPi is safer to expose beyond the Pi itself. Auth is **disabled by default** to preserve the existing local-dev workflow.
+
+### Quick start
+
+```bash
+# 1. Generate a strong secret (32 URL-safe bytes)
+bash deployment/raspberry-pi/generate-secret.sh
+# → paste output as API_SECRET_KEY in .env
+
+# 2. Turn auth on
+sed -i 's/^ENABLE_AUTH=.*/ENABLE_AUTH=true/' .env
+chmod 600 .env
+
+# 3. Restart the service (Pi)
+sudo systemctl restart rasapi
+```
+
+### API examples
+
+```bash
+# Without a key when auth is on:
+curl -i http://localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"hello"}'
+# → HTTP 401
+
+# With X-RasaPi-Key:
+curl -s http://localhost:8000/ask \
+  -H "X-RasaPi-Key: $YOUR_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"hello"}' | python3 -m json.tool
+
+# Or with Authorization: Bearer:
+curl -s http://localhost:8000/ask \
+  -H "Authorization: Bearer $YOUR_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"hello"}' | python3 -m json.tool
+```
+
+### Browser
+
+`http://<pi-ip>:8000/dashboard` redirects to `/login` when auth is on. Paste the same secret. The dashboard sets an `HttpOnly`, `SameSite=Lax` session cookie signed with `API_SECRET_KEY`. Click **Sign out** in the top bar to clear it.
+
+### Protected route matrix
+
+| Surface | Default | When `ENABLE_AUTH=true` (all flags `true`) |
+|---|---|---|
+| `/health`, `/commands`, `/dashboard/health` | public | **public always** |
+| `/login`, `/logout` | n/a | public (entry to auth) |
+| `/ask` | open | API key OR session cookie |
+| `/memory/*`, `/notes/*`, `/tasks/*` (all methods) | open | API key OR session (covers reads + writes) |
+| `/briefing/*` | open | **public** — sources are public-by-source |
+| `/voice/status` | open | public — config only, no secrets |
+| `/voice/test-tts`, `/voice/session-once` | gated by `ENABLE_VOICE` | + auth |
+| `/dashboard` | open | redirect to `/login` |
+| `/dashboard/audit/recent`, `/security-events` | open | session required |
+| Dashboard form POSTs | no CSRF | session + double-submit CSRF token |
+
+### CSRF on dashboard forms
+
+When auth is on, every dashboard `<form method="post">` includes a hidden `_csrf` input. The server compares this to a `rasapi_csrf` cookie via `hmac.compare_digest`. Mismatch → 403 + audit. When auth is off, the check is skipped so the existing local workflow keeps working.
+
+### What auth does NOT do (yet)
+
+- ❌ HTTPS / TLS termination — use Tailscale for transport encryption (Phase 9 may add a reverse proxy)
+- ❌ Rate limiting / brute-force protection — coming later
+- ❌ Multi-user accounts / OAuth — single shared secret
+- ❌ Server-side session revocation — rotate `API_SECRET_KEY` to invalidate every cookie instantly
+
+### Remote access via Tailscale
+
+Use [Tailscale](https://tailscale.com) instead of port-forwarding to the public internet. Full guide: [`deployment/raspberry-pi/remote-access.md`](deployment/raspberry-pi/remote-access.md).
+
+> **Never** port-forward port 8000 to the public internet. Phase 8 enables auth, but auth alone is not enough to safely publish RasaPi to the open web. Use Tailscale or stay on the LAN.
+
+---
+
 ## Voice I/O (Phase 7)
 
 Phase 7 adds an **opt-in, push-to-talk** voice interface. No wake word, no always-listening mode, no cloud speech, no browser microphone. Audio never leaves the device.
@@ -577,8 +659,8 @@ See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 - **Phase 4** ✅ Daily intelligence briefing
 - **Phase 5** ✅ Local web dashboard
 - **Phase 6** ✅ Raspberry Pi deployment — see [docs/deployment.md](docs/deployment.md)
-- **Phase 7** 🟡 Voice I/O (in progress) — push-to-talk, local STT/TTS
-- **Phase 8** — Authentication and remote-access hardening
+- **Phase 7** ✅ Voice I/O — push-to-talk, local STT/TTS
+- **Phase 8** 🟡 Auth + remote-access hardening (in progress) — API key, dashboard login, CSRF, Tailscale guidance
 
 ---
 
