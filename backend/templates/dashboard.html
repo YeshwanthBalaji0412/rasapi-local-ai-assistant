@@ -388,6 +388,88 @@
     </p>
   </section>
 
+  {# ── Integrations (Phase 9) ───────────────────────────────────────── #}
+  <section class="card">
+    <h2>Integrations</h2>
+
+    {% for entry in integrations_summary.registry %}
+      <div class="integration-row">
+        <h3>{{ entry.display_name }}
+          {% if entry.status == "ready" %}
+            <span class="badge enabled">ready</span>
+          {% elif entry.status == "disabled" %}
+            <span class="badge disabled">disabled</span>
+          {% elif entry.status == "not_configured" %}
+            <span class="badge warn">not configured</span>
+          {% elif entry.status == "future" %}
+            <span class="badge disabled">future</span>
+          {% else %}
+            <span class="badge">{{ entry.status }}</span>
+          {% endif %}
+          {% if entry.risk == "medium" %}
+            <span class="tag warn">risk: {{ entry.risk }}</span>
+          {% elif entry.risk == "high" %}
+            <span class="tag warn">risk: {{ entry.risk }}</span>
+          {% endif %}
+        </h3>
+        {% if entry.note %}
+          <p class="muted small">{{ entry.note }}</p>
+        {% endif %}
+
+        {% if entry.key == "slack" and entry.status == "ready" %}
+          <div class="integration-actions">
+            <form method="post" action="/integrations/slack/test" class="inline-form">
+              <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+              <button type="submit" class="btn btn-small">Send test</button>
+            </form>
+            <form method="post" action="/integrations/slack/send-briefing" class="inline-form">
+              <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+              <button type="submit" class="btn btn-small">Send briefing</button>
+            </form>
+          </div>
+        {% endif %}
+
+        {% if entry.key == "home_assistant" %}
+          <dl class="kv">
+            <dt>Allowed domains</dt>
+            <dd>
+              {% for d in integrations_summary.home_assistant.allowed_domains %}
+                <span class="tag">{{ d }}</span>
+              {% endfor %}
+            </dd>
+            <dt>Allowed entities</dt>
+            <dd>{{ integrations_summary.home_assistant.allowed_entity_count }} configured</dd>
+            <dt>Hard-blocked</dt>
+            <dd>
+              {% for d in integrations_summary.home_assistant.hard_blocked_domains %}
+                <span class="tag warn">{{ d }}</span>
+              {% endfor %}
+            </dd>
+          </dl>
+        {% endif %}
+
+        {% if entry.last_event %}
+          <p class="muted small">
+            Last event: <code>{{ entry.last_event.event_type }}</code>
+            {% if entry.last_event.outcome %}
+              · <span class="tag {% if entry.last_event.outcome in ['error','blocked'] %}warn{% endif %}">{{ entry.last_event.outcome }}</span>
+            {% endif %}
+            {% if entry.last_event.target %}
+              · <code>{{ entry.last_event.target }}</code>
+            {% endif %}
+            · {{ entry.last_event.timestamp }}
+          </p>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    <p class="muted small">
+      Tokens and webhook URLs are never displayed here. Configure
+      integrations in <code>.env</code>; see
+      <code>deployment/raspberry-pi/integrations.md</code>.
+    </p>
+  </section>
+
   {# ── Audit Log ─────────────────────────────────────────────────────── #}
   <section class="card">
     <h2>Recent Audit Events</h2>

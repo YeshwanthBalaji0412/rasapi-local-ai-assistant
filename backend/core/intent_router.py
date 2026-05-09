@@ -22,6 +22,8 @@ from typing import Callable
 from briefing import generator as briefing_generator
 from core import memory, tasks
 from core.command_runner import run_command
+from integrations import home_assistant as ha
+from integrations import slack
 
 
 # Handler signature: takes the original query and request_id, returns
@@ -119,6 +121,51 @@ INTENTS: tuple[Intent, ...] = (
         keywords=("show tasks", "list tasks", "my tasks", "open tasks"),
         handler=tasks.list_tasks_text,
     ),
+    # ── Phase 9 — integrations (Slack + Home Assistant) ─────────────────
+    Intent(
+        name="slack_send_test",
+        description="Send a test notification to Slack",
+        keywords=("send test slack", "test slack", "slack test"),
+        handler=slack.handle_send_test,
+    ),
+    Intent(
+        name="slack_send_briefing",
+        description="Send the daily or per-category briefing to Slack",
+        keywords=(
+            "send today's briefing to slack",
+            "send todays briefing to slack",
+            "send daily briefing to slack",
+            "send briefing to slack",
+            "send ai briefing to slack",
+            "send world news to slack",
+            "send tech news to slack",
+            "send developer news to slack",
+            "send hacker news to slack",
+            "send weather to slack",
+            "send immigration to slack",
+            "send to slack",
+        ),
+        handler=slack.handle_send_briefing,
+    ),
+    Intent(
+        name="ha_status",
+        description="Check Home Assistant reachability",
+        keywords=("home assistant status", "is home assistant up", "ha status"),
+        handler=ha.handle_ha_status,
+    ),
+    Intent(
+        name="ha_turn_on",
+        description="Turn on an allowed Home Assistant light or switch",
+        keywords=("turn on ",),
+        handler=ha.handle_ha_turn_on,
+    ),
+    Intent(
+        name="ha_turn_off",
+        description="Turn off an allowed Home Assistant light or switch",
+        keywords=("turn off ",),
+        handler=ha.handle_ha_turn_off,
+    ),
+
     # ── Phase 4 — daily briefing ─────────────────────────────────────────
     Intent(
         name="immigration_briefing",

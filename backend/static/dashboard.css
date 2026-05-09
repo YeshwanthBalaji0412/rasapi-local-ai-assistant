@@ -273,6 +273,29 @@ code {
   font-size: 13px;
 }
 
+/* ── Integrations (Phase 9) ─────────────────────────────────────────── */
+.integration-row {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+}
+.integration-row:last-child { border-bottom: none; }
+.integration-row h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--fg);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.integration-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
 /* ── Posture banners (Phase 8) ──────────────────────────────────────── */
 .banner {
   margin: 16px 32px;

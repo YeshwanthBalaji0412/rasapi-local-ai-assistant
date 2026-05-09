@@ -253,6 +253,7 @@ def _make_api_dep(flag_attr: str) -> Callable:
 require_auth_for_ask = _make_api_dep("auth_protect_ask")
 require_auth_for_voice = _make_api_dep("auth_protect_voice")
 require_auth_for_mutations = _make_api_dep("auth_protect_mutations")
+require_auth_for_integrations = _make_api_dep("auth_protect_integrations")
 
 
 # ─── Dashboard (browser) helpers ─────────────────────────────────────────────
@@ -280,6 +281,28 @@ def safe_next_url(raw: str | None) -> str:
 def verify_csrf(request: Request, form: dict[str, str]) -> bool:
     """Double-submit check. Skipped entirely when ENABLE_AUTH=false."""
     if not (settings.enable_auth and settings.auth_protect_dashboard):
+        return True
+    cookie = request.cookies.get(settings.csrf_cookie_name, "")
+    form_token = form.get("_csrf", "")
+    if not (cookie and form_token):
+        return False
+    return hmac.compare_digest(cookie, form_token)
+
+
+def verify_csrf_for_api(request: Request, form: dict[str, str]) -> bool:
+    """
+    CSRF check for endpoints that accept BOTH header auth (API client) and
+    cookie auth (browser).
+
+    - When auth is off, skip entirely (preserve local-dev workflow).
+    - When the request carries an API-key header (X-RasaPi-Key or
+      Authorization), it's an API call: no browser flow, no CSRF needed.
+    - When the request relies on the session cookie, require a matching
+      double-submit CSRF token.
+    """
+    if not settings.enable_auth:
+        return True
+    if request.headers.get("X-RasaPi-Key") or request.headers.get("Authorization"):
         return True
     cookie = request.cookies.get(settings.csrf_cookie_name, "")
     form_token = form.get("_csrf", "")

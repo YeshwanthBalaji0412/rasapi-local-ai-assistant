@@ -256,4 +256,46 @@ class AuditLogger:
         _write(entry)
 
 
+    def log_integration_event(
+        self,
+        *,
+        request_id: str,
+        event_type: str,
+        outcome: str = "success",
+        integration: str | None = None,
+        target: str | None = None,
+        reason: str | None = None,
+    ) -> None:
+        """
+        Records an integration event. event_type is one of:
+          integration_status_viewed,
+          slack_test_sent / slack_test_failed,
+          slack_briefing_sent / slack_briefing_failed,
+          home_assistant_status_checked,
+          home_assistant_entity_listed,
+          home_assistant_state_read,
+          home_assistant_action_requested,
+          home_assistant_action_completed,
+          home_assistant_action_blocked,
+          integration_secret_missing,
+          integration_auth_required.
+
+        `target` is the entity_id for HA actions. NEVER a webhook URL,
+        token, or auth header. Secrets are not accepted by this method.
+        """
+        entry: dict = {
+            "timestamp": _now_iso(),
+            "event_type": event_type,
+            "request_id": request_id,
+            "outcome": outcome,
+        }
+        if integration:
+            entry["integration"] = integration
+        if target:
+            entry["target"] = target[:200]
+        if reason:
+            entry["reason"] = reason[:200]
+        _write(entry)
+
+
 audit_logger = AuditLogger()

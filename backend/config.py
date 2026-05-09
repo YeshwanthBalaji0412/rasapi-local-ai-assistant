@@ -64,10 +64,27 @@ class Settings(BaseSettings):
     auth_protect_ask: bool = True
     auth_protect_voice: bool = True
     auth_protect_mutations: bool = True
+    auth_protect_integrations: bool = True
     session_cookie_name: str = "rasapi_session"
     session_ttl_minutes: int = 720
     cookie_secure: bool = False
     csrf_cookie_name: str = "rasapi_csrf"
+
+    # ── Integrations (Phase 9) ────────────────────────────────────────────
+    # Slack incoming webhook (no bot OAuth in Phase 9).
+    enable_slack: bool = False
+    slack_webhook_url: str = ""
+    slack_default_channel: str = ""
+    slack_send_briefing_enabled: bool = False
+    slack_send_audit_alerts_enabled: bool = False
+
+    # Home Assistant REST API + long-lived access token.
+    enable_home_assistant: bool = False
+    home_assistant_url: str = ""
+    home_assistant_token: str = ""
+    home_assistant_allowed_entities: str = ""    # comma-separated
+    home_assistant_allowed_domains: str = "light,switch,sensor"
+    home_assistant_require_confirmation: bool = True
 
     api_secret_key: str = "change-me-before-use"
 

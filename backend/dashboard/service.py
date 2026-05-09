@@ -52,6 +52,9 @@ _PHASE_BY_INTENT: dict[str, int] = {
     "daily_briefing": 4, "world_briefing": 4, "ai_briefing": 4,
     "tech_briefing": 4, "developer_briefing": 4,
     "weather_briefing": 4, "immigration_briefing": 4,
+    # Phase 9 — integrations
+    "slack_send_test": 9, "slack_send_briefing": 9,
+    "ha_status": 9, "ha_turn_on": 9, "ha_turn_off": 9,
 }
 
 
@@ -128,7 +131,7 @@ def get_health() -> dict:
 
 
 def get_intents_grouped() -> dict[int, list[dict]]:
-    grouped: dict[int, list[dict]] = {1: [], 3: [], 4: []}
+    grouped: dict[int, list[dict]] = {1: [], 3: [], 4: [], 9: []}
     for intent in list_intents():
         phase = _PHASE_BY_INTENT.get(intent["name"], 1)
         grouped.setdefault(phase, []).append(
@@ -264,6 +267,18 @@ def get_auth_summary() -> dict:
     }
 
 
+def get_integrations_summary() -> dict:
+    """Phase 9 — never includes webhook URLs, tokens, or HA URL."""
+    from integrations import registry as integration_registry
+    from integrations import slack
+    from integrations import home_assistant as ha
+    return {
+        "registry": integration_registry.to_safe_dicts(),
+        "slack": slack.safe_status(),
+        "home_assistant": ha.safe_status(),
+    }
+
+
 def get_voice_summary() -> dict:
     """Voice configuration + last session, if any. Read-only."""
     last_events = audit_reader.read_events_by_types(
@@ -304,6 +319,7 @@ def build_view_model() -> dict:
         "llm_summary": get_llm_summary(),
         "auth_summary": get_auth_summary(),
         "voice_summary": get_voice_summary(),
+        "integrations_summary": get_integrations_summary(),
         "audit_recent": get_audit_recent(),
         "security_events": get_security_events(),
     }
