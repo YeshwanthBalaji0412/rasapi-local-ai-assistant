@@ -1,6 +1,13 @@
 # RasaPi — Architecture
 
-This document describes the architecture as it exists in code today (Phases 1–8 complete; Phase 9 in progress). Future phases will extend specific modules without changing existing interfaces.
+This is the **shorter operator-facing summary**. For the canonical deep-dive
+covering every layer with ASCII diagrams, see
+[`docs/final-architecture.md`](final-architecture.md).
+
+This document describes the architecture as it exists in code today
+(Phases 1–9 complete; Phase 10 in progress). Phase 10 adds three
+read-only endpoints (`/version`, `/readiness`, `/config/status`) but
+makes no application-logic changes.
 
 ---
 

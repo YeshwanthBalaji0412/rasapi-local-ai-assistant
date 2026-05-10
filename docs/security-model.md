@@ -1,5 +1,13 @@
 # RasaPi — Security Model
 
+> **Phase 10 pre-flight:** before exposing RasaPi to anything other than
+> `127.0.0.1`, run through
+> [`docs/security-hardening-checklist.md`](security-hardening-checklist.md).
+> The threat model + audit log schema below is the deep dive; the
+> checklist is the short pre-flight version.
+
+
+
 This document is the security spec for the running Phase 1 codebase. Every claim here is enforced by code in `backend/security/` and `backend/core/`, and verified by tests in `tests/`.
 
 ---

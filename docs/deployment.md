@@ -1,5 +1,12 @@
 # RasaPi — Deployment
 
+> **First-time setup:** [`deployment/raspberry-pi/setup-pi.md`](../deployment/raspberry-pi/setup-pi.md).
+> **Day-to-day operation:** [`docs/operator-guide.md`](operator-guide.md).
+> **When something breaks:** [`docs/troubleshooting.md`](troubleshooting.md) and `bash deployment/raspberry-pi/doctor.sh`.
+> **Before LAN exposure:** [`docs/security-hardening-checklist.md`](security-hardening-checklist.md).
+
+
+
 RasaPi is built to be deployed once and forgotten. Phase 6 ships a
 turn-key Raspberry Pi setup so the same backend that runs on your
 MacBook in development runs unchanged on the Pi as a systemd-managed
@@ -80,6 +87,10 @@ deferred — see [`docs/roadmap.md`](roadmap.md).
 | `generate-secret.sh` | Phase 8 — print a 256-bit URL-safe `API_SECRET_KEY` |
 | `remote-access.md` | Phase 8 — Tailscale instead of port-forwarding, optional UFW, hard rules |
 | `integrations.md` | Phase 9 — Slack webhook setup, HA token + allowlist, Alexa future note, hard rules |
+| `check-readiness.sh` | Phase 10 — PASS/FAIL audit of service + endpoints + filesystem |
+| `health-check.sh` | Phase 10 — One-liner for cron monitors |
+| `update-rasapi.sh` | Phase 10 — Safe git pull + pip + restart |
+| `doctor.sh` | Phase 10 — "What's wrong" diagnostic, never prints secrets |
 
 ## What `install.sh` will not do
 
@@ -130,7 +141,8 @@ operator-managed configuration.
 
 - **Phase 7 ✅ — Voice I/O.** Audio in/out via local Whisper + Piper, all on-device.
 - **Phase 8 ✅ — Auth + remote access.** API-key + dashboard-login + CSRF + Tailscale guidance. See [`deployment/raspberry-pi/remote-access.md`](../deployment/raspberry-pi/remote-access.md).
-- **Phase 9 🟡 — Integrations hub (in progress).** Slack webhook + Home Assistant REST allowlist, Alexa future stub. See [`deployment/raspberry-pi/integrations.md`](../deployment/raspberry-pi/integrations.md).
-- **Phase 10 (or later) — HTTPS & rate limiting.** Reverse proxy with TLS, brute-force protection, optional Dockerfile, `/metrics`.
+- **Phase 9 ✅ — Integrations hub.** Slack webhook + Home Assistant REST allowlist, Alexa future stub. See [`deployment/raspberry-pi/integrations.md`](../deployment/raspberry-pi/integrations.md).
+- **Phase 10 🟡 — Operator polish (in progress).** Readiness/version/config-status endpoints, doctor/health/update/check-readiness scripts, ten new operator docs.
+- **Phase 11+ — Reliability, wake word, cloud LLM with redaction, global risk intel.** See [`docs/phase-11-roadmap.md`](phase-11-roadmap.md). HTTPS + rate limiting will live in one of those phases.
 
 See [`docs/roadmap.md`](roadmap.md).

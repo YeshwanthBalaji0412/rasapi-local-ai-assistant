@@ -292,7 +292,7 @@ No new features in this phase — only documentation and minor polish.
 
 ---
 
-## 🟡 Phase 9 — Integrations Hub & Secure Notifications (in progress)
+## ✅ Phase 9 — Integrations Hub & Secure Notifications (complete)
 
 **Goal:** Now that auth is in place, add a controlled integrations layer so RasaPi can talk to a few trusted external systems — opt-in, allowlisted, audited. Start with Slack notifications and Home Assistant device control.
 
@@ -327,6 +327,35 @@ No new features in this phase — only documentation and minor polish.
 - [ ] Natural-language sensor reads (`"what's the living room temperature"` → HA state)
 - [ ] Direct Alexa Skill integration after HTTPS / reverse-proxy phase
 - [ ] HA WebSocket subscriptions for live updates
+
+---
+
+## 🟡 Phase 10 — Final Polish + Deployable Readiness (in progress)
+
+**Goal:** Make RasaPi clean, maintainable, deployable, and operator-friendly without adding new features.
+
+**Delivered:**
+
+- [x] Three new read-only endpoints — `GET /version`, `GET /readiness`, `GET /config/status` (auth-gated). All safe summaries with no secrets.
+- [x] Four new deployment scripts — `check-readiness.sh`, `health-check.sh`, `update-rasapi.sh`, `doctor.sh`. All read-mostly, no `sudo apt install`, no secret printing.
+- [x] Ten new operator-facing docs:
+  - `docs/operator-guide.md` — day-to-day usage
+  - `docs/configuration.md` — every `.env` setting tabulated with secret/required flags
+  - `docs/maintenance.md` — update / backup / restore / rotate secret / venv recovery
+  - `docs/troubleshooting.md` — cross-phase common-issue index
+  - `docs/security-hardening-checklist.md` — pre-flight before LAN / Tailscale
+  - `docs/final-architecture.md` — canonical architecture reference with ASCII diagrams
+  - `docs/phase-11-roadmap.md` — practical future phases 11–16
+  - `docs/use-cases.md` — concrete daily scenarios
+  - `docs/command-reference.md` — every HTTP endpoint, CLI, script
+  - `docs/readiness-checklist.md` — go/no-go for daily use
+- [x] Existing 9-phase docs cross-linked to the new ones
+- [x] Version bumped to 0.10.0
+- [x] **All existing tests still pass.** Target: 330+ with new readiness/docs/scripts tests.
+
+**No application-logic changes** in Phase 10. The intent router, voice path, integrations, auth, briefing, memory, and tasks are all byte-identical to Phase 9.
+
+**Reserved for later phases:** see [`docs/phase-11-roadmap.md`](phase-11-roadmap.md) for Phases 11–16 (scheduler, wake word, HA polish, cloud LLM with redaction, global risk intel, Alexa bridge).
 
 ---
 

@@ -1,5 +1,8 @@
 # Phase 1 Demo Checklist
 
+> **For a daily-use go/no-go list** rather than a demo screenshot list,
+> see [`docs/readiness-checklist.md`](readiness-checklist.md).
+
 Screenshots to capture before sharing this repo with recruiters or hiring managers. Each one tells a piece of the story: that the system works, that it is secure by design, and that the design is observable.
 
 Save screenshots to `docs/images/` (create the folder when you do). Suggested filenames are listed against each item.

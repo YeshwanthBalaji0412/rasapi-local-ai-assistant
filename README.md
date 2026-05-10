@@ -1,6 +1,6 @@
 # RasaPi — Local-First Secure AI Assistant on Raspberry Pi 5
 
-[![Phase](https://img.shields.io/badge/phase-9%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-306%2F306-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![Phase](https://img.shields.io/badge/phase-10%20in%20progress-yellow)]() [![Tests](https://img.shields.io/badge/tests-330%2B%20passing-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 A privacy-preserving AI assistant that runs entirely on a Raspberry Pi 5. No cloud dependency. Secure command execution by default. Built iteratively, phase by phase, so every increment is testable on its own.
 
@@ -40,7 +40,8 @@ This repo is also a recruiter-facing showcase of how to build a **secure** AI sy
 | 6 | ✅ complete | Raspberry Pi deployment — systemd service, install / smoke / backup / restore scripts |
 | 7 | ✅ complete | Voice I/O — push-to-talk, local STT/TTS, no wake word, no cloud speech |
 | 8 | ✅ complete | Auth + remote access hardening — API key, dashboard login, CSRF, Tailscale guidance |
-| 9 | 🟡 in progress | Integrations hub — Slack webhook, Home Assistant REST allowlist, Alexa stub |
+| 9 | ✅ complete | Integrations hub — Slack webhook, Home Assistant REST allowlist, Alexa stub |
+| 10 | 🟡 in progress | Final polish — operator docs, readiness endpoints, doctor / update / check-readiness scripts |
 
 The deterministic intent router is still the only thing that decides what code path runs. The LLM is text-only. Memory writes go through the router or direct REST endpoints — never the LLM.
 
@@ -270,6 +271,9 @@ Any briefing that includes USCIS items is appended with:
 | GET | `/briefing/category/{category}` | Items in one category | — | 4 |
 | POST | `/briefing/refresh` | Fetch every source now | — | 4 |
 | GET | `/briefing/sources` | List configured sources + categories | — | 4 |
+| GET | `/version` | Name + version | — | 10 |
+| GET | `/readiness` | k8s-style readiness probe (JSON) | — | 10 |
+| GET | `/config/status` | Safe feature-flag summary (auth-gated when enabled) | — | 10 |
 | GET | `/integrations` | List integrations + status | — | 9 |
 | GET | `/integrations/status` | Alias of `/integrations` | — | 9 |
 | POST | `/integrations/slack/test` | Send test Slack notification | — | 9 |
@@ -428,6 +432,35 @@ Query → [1] Intent Router → [2] Allowlist Validator → [3] Subprocess (shel
 **Always blocked:** `sudo`, `bash`, `sh`, `rm`, `chmod`, `chown`, `passwd`, anything not on the allowlist. Privileged commands are not just "missing from the allowlist" — they will never be added.
 
 **Audit log:** Every request, command execution, and rejection is appended to a dated JSONL file. The log never contains secrets, full env values, or model weights. See [docs/security-model.md](docs/security-model.md) for the full threat model.
+
+---
+
+## Documentation index
+
+Phase 10 reorganized the docs around operator workflows. Start here:
+
+| Doc | Audience |
+|---|---|
+| [`docs/operator-guide.md`](docs/operator-guide.md) | Day-to-day usage (dashboard, /ask, voice, restart) |
+| [`docs/configuration.md`](docs/configuration.md) | Every `.env` setting, with secret/required flags |
+| [`docs/maintenance.md`](docs/maintenance.md) | Update / backup / restore / rotate secret / disk |
+| [`docs/troubleshooting.md`](docs/troubleshooting.md) | Cross-phase common-issue index |
+| [`docs/use-cases.md`](docs/use-cases.md) | Concrete daily scenarios |
+| [`docs/command-reference.md`](docs/command-reference.md) | Every HTTP endpoint, voice CLI, systemd, script |
+| [`docs/security-hardening-checklist.md`](docs/security-hardening-checklist.md) | Pre-flight before LAN / Tailscale exposure |
+| [`docs/readiness-checklist.md`](docs/readiness-checklist.md) | Go / no-go before "daily-use ready" |
+| [`docs/final-architecture.md`](docs/final-architecture.md) | Canonical architecture reference |
+| [`docs/phase-11-roadmap.md`](docs/phase-11-roadmap.md) | What might come next |
+| [`docs/security-model.md`](docs/security-model.md) | Detailed threat model + audit log schema |
+| [`docs/architecture.md`](docs/architecture.md) | Short operator-facing architecture overview |
+| [`docs/deployment.md`](docs/deployment.md) | Deployment overview + supported targets |
+| [`docs/roadmap.md`](docs/roadmap.md) | Phase-by-phase history |
+| [`docs/demo-checklist.md`](docs/demo-checklist.md) | Screenshots for portfolio / recruiter use |
+| [`deployment/raspberry-pi/setup-pi.md`](deployment/raspberry-pi/setup-pi.md) | First-time Pi setup |
+| [`deployment/raspberry-pi/audio-setup.md`](deployment/raspberry-pi/audio-setup.md) | Audio / Whisper / TTS setup |
+| [`deployment/raspberry-pi/integrations.md`](deployment/raspberry-pi/integrations.md) | Slack / HA setup |
+| [`deployment/raspberry-pi/remote-access.md`](deployment/raspberry-pi/remote-access.md) | Tailscale guidance |
+| [`deployment/raspberry-pi/troubleshooting.md`](deployment/raspberry-pi/troubleshooting.md) | Pi-specific issues |
 
 ---
 
@@ -733,7 +766,8 @@ See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 - **Phase 6** ✅ Raspberry Pi deployment — see [docs/deployment.md](docs/deployment.md)
 - **Phase 7** ✅ Voice I/O — push-to-talk, local STT/TTS
 - **Phase 8** ✅ Auth + remote-access hardening — API key, dashboard login, CSRF, Tailscale guidance
-- **Phase 9** 🟡 Integrations hub (in progress) — Slack webhook, Home Assistant REST allowlist, Alexa stub
+- **Phase 9** ✅ Integrations hub — Slack webhook, Home Assistant REST allowlist, Alexa stub
+- **Phase 10** 🟡 Final polish (in progress) — operator docs, readiness endpoints, doctor / update / check-readiness scripts. See [`docs/phase-11-roadmap.md`](docs/phase-11-roadmap.md) for what comes next.
 
 ---
 
