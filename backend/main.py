@@ -13,6 +13,7 @@ from api.routes import (
     health,
     integrations,
     memory,
+    readiness,
     tasks,
     voice,
 )
@@ -38,7 +39,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.assistant_name,
     description="Local-first secure AI assistant on Raspberry Pi 5",
-    version="0.9.0",
+    version="0.10.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url=None,
@@ -56,3 +57,4 @@ app.include_router(dashboard.router)
 app.include_router(voice.router)
 app.include_router(auth.router)
 app.include_router(integrations.router)
+app.include_router(readiness.router)
