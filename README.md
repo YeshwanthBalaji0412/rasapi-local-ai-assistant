@@ -41,7 +41,8 @@ This repo is also a recruiter-facing showcase of how to build a **secure** AI sy
 | 7 | ✅ complete | Voice I/O — push-to-talk, local STT/TTS, no wake word, no cloud speech |
 | 8 | ✅ complete | Auth + remote access hardening — API key, dashboard login, CSRF, Tailscale guidance |
 | 9 | ✅ complete | Integrations hub — Slack webhook, Home Assistant REST allowlist, Alexa stub |
-| 10 | 🟡 in progress | Final polish — operator docs, readiness endpoints, doctor / update / check-readiness scripts |
+| 10 | ✅ complete | Final polish — operator docs, readiness endpoints, doctor / update / check-readiness scripts |
+| 11 | ✅ complete | Daily-use interaction layer — `/assistant` chat box, dashboard voice trigger, short spoken briefing, cron/systemd-friendly scheduler scripts, health watchdog, log/audio retention |
 
 The deterministic intent router is still the only thing that decides what code path runs. The LLM is text-only. Memory writes go through the router or direct REST endpoints — never the LLM.
 

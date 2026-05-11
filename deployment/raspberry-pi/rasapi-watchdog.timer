@@ -1,0 +1,22 @@
+# systemd timer: run the RasaPi health watchdog every 15 minutes.
+#
+# Install:
+#   sudo cp deployment/raspberry-pi/rasapi-watchdog.timer  /etc/systemd/system/
+#   sudo cp deployment/raspberry-pi/rasapi-watchdog.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now rasapi-watchdog.timer
+#
+# The matching .service unit must invoke run-health-watchdog.sh.
+
+[Unit]
+Description=RasaPi health watchdog timer
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Unit=rasapi-watchdog.service
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

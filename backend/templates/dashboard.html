@@ -17,6 +17,7 @@
     <span class="badge running">Running</span>
     <span class="version">v{{ overview.version }}</span>
     <span class="phase">{{ overview.phase }}</span>
+    <a href="/assistant" class="btn btn-small">Open Assistant</a>
     {% if auth_summary.enabled %}
       <form method="post" action="/logout" class="inline-form">
         <input type="hidden" name="_csrf" value="{{ csrf_token }}" />

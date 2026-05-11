@@ -1,0 +1,17 @@
+# Companion oneshot service for rasapi-watchdog.timer.
+# Adjust User= and the path to match your install.
+
+[Unit]
+Description=RasaPi health watchdog (one-shot)
+After=network-online.target rasapi.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=yesh
+WorkingDirectory=/home/yesh/rasapi-local-ai-assistant
+ExecStart=/usr/bin/bash deployment/raspberry-pi/run-health-watchdog.sh
+# Optional: provide the Slack webhook via an EnvironmentFile (chmod 600).
+# EnvironmentFile=-/etc/rasapi/watchdog.env
+StandardOutput=journal
+StandardError=journal

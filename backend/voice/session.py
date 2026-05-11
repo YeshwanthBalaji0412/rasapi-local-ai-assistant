@@ -24,6 +24,7 @@ from pathlib import Path
 from config import settings
 from core import orchestration
 from security.audit_log import audit_logger
+from voice import briefing_shortener
 from voice import recorder as recorder_module
 from voice import stt as stt_module
 from voice import tts as tts_module
@@ -120,9 +121,18 @@ async def run_session_once(
             )
 
         # ── 4. Speak ───────────────────────────────────────────────────
+        # Phase 11: shorten the TTS payload only. `response_text` in the
+        # VoiceResult below stays the full response — the JSON / CLI answer
+        # is canonical, but a daily briefing won't hang the TTS engine.
+        spoken_text = briefing_shortener.maybe_shorten_for_voice(
+            intent=intent,
+            response=response_text,
+            max_spoken_chars=settings.voice_max_spoken_chars,
+            briefing_items_per_category=settings.voice_briefing_items_per_category,
+        )
         tts_engine = tts_module.build_tts()
         tts_start = time.monotonic()
-        tts_engine.speak(text=response_text)
+        tts_engine.speak(text=spoken_text)
         tts_ms = int((time.monotonic() - tts_start) * 1000)
         audit_logger.log_voice_event(
             request_id=rid,

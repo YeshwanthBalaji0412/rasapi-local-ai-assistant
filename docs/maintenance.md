@@ -51,13 +51,22 @@ The audit log never contains secrets or audio bytes — see
 ## Clear old audit logs
 
 Audit logs rotate daily (`audit-YYYY-MM-DD.jsonl`). RasaPi does not
-auto-prune them in Phase 10. To delete logs older than 30 days:
+auto-prune them. Two ways to clean up:
 
 ```bash
+# Manual one-shot:
 find ~/rasapi-local-ai-assistant/logs/ -name 'audit-*.jsonl' -mtime +30 -print
-# review the list, then:
 find ~/rasapi-local-ai-assistant/logs/ -name 'audit-*.jsonl' -mtime +30 -delete
+
+# Phase 11 — scripted, dry-run first:
+bash deployment/raspberry-pi/run-log-cleanup.sh --dry-run
+bash deployment/raspberry-pi/run-log-cleanup.sh
 ```
+
+The scripted form also prunes old temp audio files. Tune retention with
+`LOG_RETENTION_DAYS=30` and `AUDIO_TMP_RETENTION_HOURS=24`. Schedule it
+via cron or a systemd timer — see
+[`deployment/raspberry-pi/scheduler.md`](../deployment/raspberry-pi/scheduler.md).
 
 Consider backing up first if you care about long-term forensics.
 
@@ -68,10 +77,15 @@ Consider backing up first if you care about long-term forensics.
 ```bash
 bash deployment/raspberry-pi/backup.sh
 # → ~/rasapi-backups/<utc-timestamp>/{rasapi.db, audit-*.jsonl}
+
+# Phase 11 — same backup, plus rotation of snapshots older than 14 days:
+bash deployment/raspberry-pi/run-backup.sh
 ```
 
 `.env` is **intentionally not included** — treat it as operator-managed
-config. The script script never copies it.
+config. The script never copies it. Tune retention with
+`BACKUP_RETENTION_DAYS=14`. Schedule via cron or a systemd timer —
+see [`deployment/raspberry-pi/scheduler.md`](../deployment/raspberry-pi/scheduler.md).
 
 For a fully consistent SQLite snapshot, stop the service first:
 
@@ -153,7 +167,17 @@ When something is off and you don't know what:
 bash deployment/raspberry-pi/doctor.sh
 ```
 
-These three scripts never print secrets and never modify state.
+Scheduled watchdog (Phase 11) — checks systemd, `/health`, `/readiness`,
+and disk usage in one shot; emits an optional Slack alert on failure:
+
+```bash
+bash deployment/raspberry-pi/run-health-watchdog.sh
+```
+
+Tune `WATCHDOG_DISK_THRESHOLD_PCT=90`. Wire it up via cron or systemd
+timer per [`deployment/raspberry-pi/scheduler.md`](../deployment/raspberry-pi/scheduler.md).
+
+None of these scripts print secrets or modify state.
 
 ---
 

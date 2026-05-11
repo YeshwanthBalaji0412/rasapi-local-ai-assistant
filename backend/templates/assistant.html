@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ assistant_name }} — Assistant</title>
+  <link rel="stylesheet" href="/static/dashboard.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="brand">
+    <h1>{{ assistant_name }} · Assistant</h1>
+    <p class="subtitle">Chat with the local intent router. Same path as <code>/ask</code>.</p>
+  </div>
+  <div class="meta">
+    <a href="/dashboard" class="btn btn-small">Dashboard</a>
+    {% if auth_enabled %}
+      <form method="post" action="/logout" class="inline-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+        <button type="submit" class="btn btn-small">Sign out</button>
+      </form>
+    {% endif %}
+  </div>
+</header>
+
+<main class="single-column">
+
+  {% if error %}
+  <div class="banner warn">{{ error }}</div>
+  {% endif %}
+
+  <section class="card">
+    <h2>Send a message</h2>
+    <form method="post" action="/assistant/ask" class="stacked-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+      <label for="query" class="muted small">Your message</label>
+      <textarea
+        id="query"
+        name="query"
+        rows="3"
+        maxlength="{{ max_query_chars }}"
+        placeholder="e.g. what time is it · remember that my project is RasaPi · daily briefing"
+        required
+      ></textarea>
+      <div class="form-actions">
+        <button type="submit" class="btn">Send</button>
+        <span class="muted small">Routed through the deterministic intent router. The LLM is fallback only.</span>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Voice session on the Raspberry Pi</h2>
+    {% if voice_enabled %}
+      <p class="muted small">
+        Records one push-to-talk session on the Pi's microphone, transcribes
+        with Whisper, runs through the same router, and speaks the reply.
+        Audio is captured by the Pi, not your browser.
+      </p>
+      <form method="post" action="/assistant/voice-trigger" class="inline-form-block">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+        <button type="submit" class="btn">Start one voice session on the Pi</button>
+      </form>
+      <p class="muted small">
+        One session takes ~6–30s. The page will pause until it finishes.
+      </p>
+    {% else %}
+      <p class="muted small">
+        Voice is disabled. Set <code>ENABLE_VOICE=true</code> in <code>.env</code> and restart to enable.
+      </p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Recent exchanges</h2>
+    {% if history %}
+      <ul class="row-list chat-list">
+        {% for ex in history|reverse %}
+          <li>
+            <div class="chat-q"><strong>You:</strong> {{ ex.query }}</div>
+            <div class="chat-a"><strong>{{ assistant_name }}:</strong> <pre class="chat-response">{{ ex.response }}</pre></div>
+            <div class="muted small">intent: {{ ex.intent }} · source: {{ ex.source }}</div>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="muted small">
+        Last {{ history|length }} exchange{{ '' if history|length == 1 else 's' }}. Stored in memory only —
+        cleared on sign out or restart. Not part of <code>/memory</code>.
+      </p>
+    {% else %}
+      <p class="muted small">No messages yet in this session.</p>
+    {% endif %}
+  </section>
+
+</main>
+
+</body>
+</html>

@@ -1,0 +1,19 @@
+# systemd timer: refresh the RasaPi daily briefing each morning at 06:30 local.
+#
+# Install:
+#   sudo cp deployment/raspberry-pi/rasapi-briefing.timer  /etc/systemd/system/
+#   sudo cp deployment/raspberry-pi/rasapi-briefing.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now rasapi-briefing.timer
+
+[Unit]
+Description=RasaPi daily briefing refresh timer
+
+[Timer]
+OnCalendar=*-*-* 06:30:00
+Unit=rasapi-briefing.service
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

@@ -157,6 +157,22 @@ pactl set-card-profile <card-name> headset_head_unit
 
 Some Pi distributions need `pulseaudio-module-bluetooth` installed.
 
+### TTS hangs or times out when speaking the daily briefing
+
+Fixed in Phase 11. The voice path now passes briefing responses through
+`voice/briefing_shortener.py`, which keeps one item per category and
+caps the spoken payload to `VOICE_MAX_SPOKEN_CHARS` (default 1200).
+
+If you want longer or shorter spoken briefings, tune `.env`:
+
+```env
+VOICE_MAX_SPOKEN_CHARS=1200
+VOICE_BRIEFING_ITEMS_PER_CATEGORY=1
+```
+
+`/ask`, `/briefing/daily`, and the dashboard still show the full
+briefing — the shortener only affects what the TTS engine receives.
+
 ---
 
 ## Integrations

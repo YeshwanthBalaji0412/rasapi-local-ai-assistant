@@ -97,6 +97,25 @@ class Settings(BaseSettings):
     home_assistant_allowed_domains: str = "light,switch,sensor"
     home_assistant_require_confirmation: bool = True
 
+    # ── Phase 11: Interaction layer + reliability ─────────────────────────
+    # voice_max_spoken_chars caps any TTS payload to avoid long sessions /
+    # timeouts. voice_briefing_items_per_category trims daily-briefing voice
+    # output to N items per category. Both apply only in the voice path —
+    # /ask, /dashboard, and /briefing/refresh still return the full briefing.
+    voice_max_spoken_chars: int = 1200
+    voice_briefing_items_per_category: int = 1
+    # Retention windows used by deployment/raspberry-pi/run-log-cleanup.sh
+    # and run-backup.sh. Cleanup is opt-in (operator runs the script via
+    # cron or systemd-timer); the backend never auto-deletes.
+    log_retention_days: int = 30
+    audio_tmp_retention_hours: int = 24
+    backup_retention_days: int = 14
+    # Health watchdog disk-usage alert threshold (percent). The watchdog
+    # script reads this only via env passed by the operator — the backend
+    # surfaces the value via /config/status for visibility.
+    watchdog_disk_threshold_pct: int = 90
+    watchdog_slack_on_alert: bool = False
+
     api_secret_key: str = "change-me-before-use"
 
     database_path: str = "backend/data/rasapi.db"

@@ -24,7 +24,7 @@ from security import auth as auth_module
 router = APIRouter(tags=["readiness"])
 
 
-_VERSION = "0.10.0"
+_VERSION = "0.11.0"
 _NAME = "RasaPi"
 
 
@@ -131,6 +131,8 @@ def _safe_feature_flags() -> dict:
                 settings.voice_piper_config_path.strip()
             ),
             "tts_playback_command": settings.voice_tts_playback_command or "auto",
+            "max_spoken_chars": settings.voice_max_spoken_chars,
+            "briefing_items_per_category": settings.voice_briefing_items_per_category,
         },
         "briefing": {
             "enabled": bool(settings.enable_briefing),
@@ -157,6 +159,13 @@ def _safe_feature_flags() -> dict:
                     if e.strip()
                 ]
             ),
+        },
+        "scheduler": {
+            "log_retention_days": settings.log_retention_days,
+            "audio_tmp_retention_hours": settings.audio_tmp_retention_hours,
+            "backup_retention_days": settings.backup_retention_days,
+            "watchdog_disk_threshold_pct": settings.watchdog_disk_threshold_pct,
+            "watchdog_slack_on_alert": bool(settings.watchdog_slack_on_alert),
         },
     }
 

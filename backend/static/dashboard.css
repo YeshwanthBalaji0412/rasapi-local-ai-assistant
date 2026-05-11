@@ -322,3 +322,55 @@ code {
   border-top: 1px solid var(--border);
   margin-top: 24px;
 }
+
+/* Phase 11 — /assistant page additions. */
+main.single-column {
+  display: block;
+  max-width: 760px;
+  margin: 16px auto;
+  padding: 0 16px;
+}
+.stacked-form { display: flex; flex-direction: column; gap: 10px; }
+.stacked-form textarea {
+  width: 100%;
+  resize: vertical;
+  background: var(--code-bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.stacked-form textarea:focus { outline: 1px solid var(--accent); }
+.form-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.inline-form-block { display: block; margin: 8px 0; }
+.chat-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+}
+.chat-q, .chat-a { color: var(--fg); }
+.chat-response {
+  margin: 4px 0 0;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+/* Phase 11 — /assistant page additions. */
+main.single-column {
+  display: block;
+  max-width: 760px;
+  margin: 16px auto;
+  padding: 0 16px;
+}
+.stacked-form { display: flex; flex-direction: column; gap: 10px; }
+.stacked-form textarea {
+  width: 100

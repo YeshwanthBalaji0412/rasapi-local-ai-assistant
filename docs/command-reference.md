@@ -38,6 +38,18 @@ curl -s -X POST http://<pi-ip>:8000/ask \
   -H 'Content-Type: application/json' \
   -d '{"query":"what time is it"}' | python3 -m json.tool
 
+# /assistant/ask — same logic, form-encoded (used by the /assistant page).
+# When called with X-RasaPi-Key, CSRF is skipped (verify_csrf_for_api).
+curl -s -X POST http://<pi-ip>:8000/assistant/ask \
+  -H "X-RasaPi-Key: $YOUR_KEY" \
+  -d 'query=what time is it'
+
+# /assistant/voice-trigger — runs one push-to-talk session on the Pi.
+# Identical effect to POST /voice/session-once; this just lives next to
+# the chat page in the browser flow.
+curl -s -X POST http://<pi-ip>:8000/assistant/voice-trigger \
+  -H "X-RasaPi-Key: $YOUR_KEY"
+
 # Memory
 curl -s -X POST http://<pi-ip>:8000/memory \
   -H "X-RasaPi-Key: $YOUR_KEY" \
@@ -198,6 +210,12 @@ bash deployment/raspberry-pi/doctor.sh
 
 # Safe update from GitHub:
 bash deployment/raspberry-pi/update-rasapi.sh
+
+# Phase 11 — scheduler-friendly scripts (see scheduler.md for wiring):
+bash deployment/raspberry-pi/run-daily-briefing.sh
+bash deployment/raspberry-pi/run-backup.sh           # supports --dry-run
+bash deployment/raspberry-pi/run-health-watchdog.sh
+bash deployment/raspberry-pi/run-log-cleanup.sh      # supports --dry-run
 ```
 
 ---
@@ -245,6 +263,7 @@ curl -i -X POST http://<pi-ip>:8000/integrations/home-assistant/entities/lock.fr
 | URL | What |
 |---|---|
 | `http://<pi-ip>:8000/dashboard` | Full dashboard |
+| `http://<pi-ip>:8000/assistant` | Chat box + voice trigger button (Phase 11) |
 | `http://<pi-ip>:8000/dashboard/health` | JSON health snapshot |
 | `http://<pi-ip>:8000/dashboard/audit/recent` | JSON, last N audit events |
 | `http://<pi-ip>:8000/dashboard/security-events` | JSON, filtered to blocks/failures |

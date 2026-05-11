@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from config import settings
+from core import chat_history
 from security import auth as auth_module
 from security.audit_log import audit_logger
 
@@ -98,6 +99,11 @@ async def post_login(request: Request):
 @router.post("/logout")
 def post_logout(request: Request):
     request_id = auth_module._audit_id()
+    # Phase 11: clear any in-memory /assistant chat history for this session
+    # before we drop the cookie. Safe no-op when no history was kept.
+    session_token = request.cookies.get(settings.session_cookie_name, "")
+    if session_token:
+        chat_history.clear(session_token)
     response = RedirectResponse(url="/login", status_code=303)
     auth_module.clear_session_cookie(response)
     audit_logger.log_auth_event(

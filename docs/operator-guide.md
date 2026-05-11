@@ -38,6 +38,22 @@ To sign out, click **Sign out** in the top bar.
 
 ---
 
+## Chatting from the browser (Phase 11)
+
+```
+http://<pi-ip>:8000/assistant
+```
+
+A simple chat box that POSTs to `orchestration.process_query` — the same
+entry point `/ask` uses. The page also has a **Start one voice session
+on the Pi** button that triggers a single push-to-talk session on the
+Raspberry Pi's microphone (your browser does not stream audio).
+
+The last 10 exchanges are kept in memory only and clear on sign-out.
+They are not written to SQLite and are not part of `/memory`.
+
+---
+
 ## Using `/ask` from the command line
 
 ```bash

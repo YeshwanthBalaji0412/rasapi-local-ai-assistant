@@ -9,37 +9,93 @@ of order, or never do some of them at all.
 
 ---
 
-## Phase 11 — Reliability + Scheduler
+## Phase 11 — Interaction Layer + Reliability (shipped)
 
-**Goal:** RasaPi runs unattended for weeks. Background work that today
-requires the operator to manually trigger (briefing refresh, backups,
-log rotation) should be automatic and observable.
+**Goal:** Make RasaPi a daily-use assistant — usable from the dashboard,
+not just from terminal commands — and keep it running unattended for
+weeks with safe scheduled work and visible health signals.
 
-**Likely scope:**
-- Local scheduler module (`backend/scheduler/`) — APScheduler or a
-  hand-rolled async loop. No new heavy deps if avoidable.
-- Scheduled daily briefing refresh (e.g. every morning at 06:30 local)
-- Scheduled backups (e.g. nightly to `~/rasapi-backups/`)
-- Log rotation: prune `audit-*.jsonl` older than N days
-- Health watchdog: emit `health_warning` audit event when disk > 90%,
-  when `rasapi.service` has restarted recently, when briefing fetches
-  fail consistently
-- Optional Slack notification on watchdog events (reuses Phase 9 Slack)
-- Schedule config in `.env`:
-  - `SCHEDULER_ENABLED=false`
-  - `SCHEDULED_BRIEFING_CRON=`
-  - `SCHEDULED_BACKUP_CRON=`
-  - `AUDIT_LOG_RETENTION_DAYS=30`
+**Approach taken (vs the earlier sketch):** *No* in-process scheduler.
+Instead, four small shell scripts callable from `cron` **or** systemd
+timers. Surviving across backend restarts comes for free, and the
+FastAPI process stays pure request/response. If we ever need a UI to
+edit schedules, an in-process layer can be added on top later.
+
+**What shipped:**
+
+Interaction layer
+- New page `GET /assistant` — server-rendered chat box (Jinja2, no JS
+  framework, no CDN). Same auth path as `/dashboard`.
+- `POST /assistant/ask` runs `orchestration.process_query` — the **same**
+  single entry point that `/ask` and the voice loop use. No new command
+  execution path. CSRF for cookie flow, header auth (`X-RasaPi-Key`)
+  skips CSRF (`verify_csrf_for_api`).
+- `POST /assistant/voice-trigger` runs one push-to-talk session on the
+  Raspberry Pi's microphone via `voice.session.run_session_once`. The
+  browser does **not** stream audio. Same auth as `/voice/session-once`.
+- Dashboard header links to `/assistant`.
+- Chat history is **in-memory only**, capped at 10 exchanges per
+  session, cleared on logout / cookie expiry / restart. Not persisted
+  to SQLite. Not treated as Phase 3 memory.
+
+Voice-only short briefing
+- New `voice/briefing_shortener.py` reduces the daily briefing to one
+  item per category and caps total characters before TTS. `/ask`,
+  `/dashboard`, and `/briefing` JSON responses are unchanged.
+- Config: `VOICE_MAX_SPOKEN_CHARS=1200`, `VOICE_BRIEFING_ITEMS_PER_CATEGORY=1`.
+
+Reliability scripts (no in-process daemon)
+- `deployment/raspberry-pi/run-daily-briefing.sh` — calls
+  `POST /briefing/refresh`. Cron / systemd-timer friendly.
+- `deployment/raspberry-pi/run-backup.sh` — wraps `backup.sh` and
+  rotates snapshots older than `BACKUP_RETENTION_DAYS`. Refuses to
+  operate when `BACKUP_ROOT` is empty or `/`.
+- `deployment/raspberry-pi/run-health-watchdog.sh` — probes systemd +
+  `/health` + `/readiness` + disk. Optional Slack alert (URL never
+  echoed). Never restarts services, never deletes data.
+- `deployment/raspberry-pi/run-log-cleanup.sh` — prunes audit JSONL
+  older than `LOG_RETENTION_DAYS` and temp audio older than
+  `AUDIO_TMP_RETENTION_HOURS`. Paths are hardcoded relative to repo
+  root — env vars cannot redirect deletion.
+- All four scripts: `set -euo pipefail`, `--dry-run` where useful,
+  `bash -n` clean, no embedded secrets.
+- Example systemd timer + service unit files: `rasapi-watchdog.timer`,
+  `rasapi-watchdog.service`, `rasapi-briefing.timer`, `rasapi-briefing.service`.
+- Wiring guide: `deployment/raspberry-pi/scheduler.md` (cron and
+  systemd timer paths).
+
+Config keys added (all opt-in, safe defaults)
+- `VOICE_MAX_SPOKEN_CHARS=1200`
+- `VOICE_BRIEFING_ITEMS_PER_CATEGORY=1`
+- `LOG_RETENTION_DAYS=30`
+- `AUDIO_TMP_RETENTION_HOURS=24`
+- `BACKUP_RETENTION_DAYS=14`
+- `WATCHDOG_DISK_THRESHOLD_PCT=90`
+- `WATCHDOG_SLACK_ON_ALERT=false`
+
+`/config/status` surfaces these under `voice.*` and `scheduler.*`
+(integers and booleans only — never the secret values or file paths).
 
 **Security invariants preserved:**
-- All scheduled actions go through the same orchestration + audit path
-  as manual ones
-- No new external dependencies on a third-party cron service
-- Scheduler can be disabled with one env flag
+- `/assistant/ask` routes through `orchestration.process_query`, same
+  as `/ask`. Verified by an AST test that asserts
+  `backend/api/routes/assistant.py` imports neither `command_runner`
+  nor `local_llm` directly.
+- The voice trigger button does not stream browser audio. The Pi
+  captures audio via the existing recorder.
+- Scripts never echo `$RASA_API_KEY` or `$SLACK_WEBHOOK_URL`. Verified
+  by tests.
+- Chat history never reaches the executor and never enters audit
+  payloads or SQLite.
+- All four scripts use hardcoded paths or refuse pathological inputs
+  (empty `BACKUP_ROOT`, `/`). Verified by tests.
 
-**Out of scope for Phase 11:**
+**Out of scope for Phase 11 (deferred):**
 - ❌ Public-facing webhooks (would require Phase 16 work)
 - ❌ Multi-host coordination
+- ❌ Rate limiting on the API key
+- ❌ Wake word (Phase 12)
+- ❌ Always-listening mode
 
 ---
 
