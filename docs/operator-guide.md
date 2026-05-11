@@ -72,6 +72,20 @@ Voice is **push-to-talk only**. No wake word, no always-listening. See
 [`deployment/raspberry-pi/audio-setup.md`](../deployment/raspberry-pi/audio-setup.md)
 for engine setup.
 
+### Voice setup on a Pi (Phase 10 polish)
+
+Once `whisper.cpp` and Piper are installed, three `.env` keys make the
+voice stack work cleanly — no symlinks, no wrapper scripts:
+
+```env
+VOICE_WHISPER_MODEL_PATH=/home/<PI_USER>/whisper.cpp/models/ggml-tiny.en.bin
+VOICE_PIPER_MODEL_PATH=/home/<PI_USER>/piper-voices/en_US-amy-low.onnx
+VOICE_TTS_PLAYBACK_COMMAND=auto   # prefers paplay (PipeWire/Bluetooth safe)
+```
+
+Piper is recommended over espeak-ng for clearer voice. `espeak-ng`
+remains the reliable fallback if Piper has trouble installing.
+
 ---
 
 ## Memory, notes, tasks

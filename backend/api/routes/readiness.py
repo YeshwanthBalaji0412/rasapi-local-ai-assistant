@@ -120,6 +120,17 @@ def _safe_feature_flags() -> dict:
             "recorder_engine": settings.voice_recorder_engine,
             "save_audio": bool(settings.voice_save_audio),
             "log_transcripts": bool(settings.voice_log_transcripts),
+            # Booleans only — never the path itself.
+            "whisper_model_configured": bool(
+                settings.voice_whisper_model_path.strip()
+            ),
+            "piper_model_configured": bool(
+                settings.voice_piper_model_path.strip()
+            ),
+            "piper_config_configured": bool(
+                settings.voice_piper_config_path.strip()
+            ),
+            "tts_playback_command": settings.voice_tts_playback_command or "auto",
         },
         "briefing": {
             "enabled": bool(settings.enable_briefing),

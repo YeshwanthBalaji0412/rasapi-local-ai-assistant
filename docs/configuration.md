@@ -78,8 +78,12 @@ which are safe to share.
 | `VOICE_LOG_TRANSCRIPTS` | `true` | no | no | When `true`, voice transcripts go through the existing `request` audit event. |
 | `VOICE_MAX_TRANSCRIPT_CHARS` | `1000` | no | no | Truncates before `process_query`. |
 | `VOICE_REQUIRE_PUSH_TO_TALK` | `true` | no | no | Phase 7 has no wake word — leave this on. |
-| `VOICE_DEVICE_INPUT` | _empty_ | no | no | ALSA device hint, e.g. `plughw:1,0`. |
-| `VOICE_DEVICE_OUTPUT` | _empty_ | no | no | ALSA device hint. |
+| `VOICE_DEVICE_INPUT` | _empty_ | no | no | ALSA device hint. Use `pulse` on Pi with PipeWire / Bluetooth. |
+| `VOICE_DEVICE_OUTPUT` | _empty_ | no | no | ALSA / Pulse device hint. Leave blank to use the system default. |
+| `VOICE_WHISPER_MODEL_PATH` | _empty_ | when `VOICE_STT_ENGINE=whisper` | no | Absolute path to a whisper.cpp `.bin` model. Adapter passes it via `-m`. No symlink needed. |
+| `VOICE_PIPER_MODEL_PATH` | _empty_ | when `VOICE_TTS_ENGINE=piper` | no | Absolute path to a Piper `.onnx` voice. Adapter passes it via `--model`. |
+| `VOICE_PIPER_CONFIG_PATH` | _empty_ | no | no | Optional path to a Piper `.onnx.json` config. Only needed if it doesn't sit beside the `.onnx`. |
+| `VOICE_TTS_PLAYBACK_COMMAND` | `auto` | no | no | `auto` \| `paplay` \| `aplay`. `auto` prefers `paplay` (PipeWire/Bluetooth-safe). |
 
 ---
 

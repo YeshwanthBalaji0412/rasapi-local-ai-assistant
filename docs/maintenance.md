@@ -179,8 +179,12 @@ bash deployment/raspberry-pi/install.sh
 | `backend/data/rasapi.db` | Your memory, notes, tasks, and briefing history. |
 | `logs/audit-*.jsonl` | The audit trail. Useful for forensics. |
 | `backend/.venv` | Run `install.sh` to recreate if you do delete this. |
+| `~/whisper.cpp/models/*.bin` | Whisper model files. Not committed to git. Re-download from the whisper.cpp upstream if lost. Point `VOICE_WHISPER_MODEL_PATH` at the new location. |
+| `~/piper-voices/*.onnx*` | Piper voice files. Not committed to git. Re-download from Hugging Face if lost. Point `VOICE_PIPER_MODEL_PATH` at the new location. |
 
-Everything else can be regenerated from git.
+Everything else can be regenerated from git. Model files (Whisper `.bin`,
+Piper `.onnx`/`.onnx.json`) are deliberately **not** in the repo — they're
+large and operator-managed.
 
 ---
 

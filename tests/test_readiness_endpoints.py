@@ -142,3 +142,49 @@ def test_config_status_does_not_contain_filesystem_paths(client, auth_on):
     assert not re.search(r"/Users/[^\"]+", body)
     assert not re.search(r"/home/[^\"]+", body)
     assert not re.search(r"/private/var/", body)
+
+
+# ─── Phase 10 polish: voice model summary in /config/status ─────────────────
+
+
+def test_config_status_voice_section_exposes_boolean_flags_not_paths(
+    client, auth_on, monkeypatch
+):
+    """When voice model paths are configured, /config/status must report
+    *that they are configured* — never the path value itself."""
+    sentinel_whisper = "/home/sentinel/whisper.cpp/models/ggml-tiny.en.bin"
+    sentinel_piper = "/home/sentinel/piper-voices/SECRET-VOICE.onnx"
+    sentinel_config = "/home/sentinel/piper-voices/SECRET-VOICE.onnx.json"
+    monkeypatch.setattr(settings, "voice_whisper_model_path", sentinel_whisper)
+    monkeypatch.setattr(settings, "voice_piper_model_path", sentinel_piper)
+    monkeypatch.setattr(settings, "voice_piper_config_path", sentinel_config)
+    monkeypatch.setattr(settings, "voice_tts_playback_command", "paplay")
+
+    resp = client.get(
+        "/config/status", headers={"X-RasaPi-Key": _TEST_KEY}
+    )
+    body_text = resp.text
+    body = resp.json()
+
+    # The booleans are present, true.
+    assert body["voice"]["whisper_model_configured"] is True
+    assert body["voice"]["piper_model_configured"] is True
+    assert body["voice"]["piper_config_configured"] is True
+    assert body["voice"]["tts_playback_command"] == "paplay"
+
+    # None of the sentinel paths appear in the response.
+    assert sentinel_whisper not in body_text
+    assert sentinel_piper not in body_text
+    assert sentinel_config not in body_text
+
+
+def test_config_status_voice_section_when_models_not_configured(client, auth_on):
+    """Default config — paths empty — should report false for each."""
+    resp = client.get(
+        "/config/status", headers={"X-RasaPi-Key": _TEST_KEY}
+    )
+    body = resp.json()
+    assert body["voice"]["whisper_model_configured"] is False
+    assert body["voice"]["piper_model_configured"] is False
+    assert body["voice"]["piper_config_configured"] is False
+    assert body["voice"]["tts_playback_command"] == "auto"

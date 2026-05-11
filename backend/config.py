@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     voice_require_push_to_talk: bool = True
     voice_device_input: str = ""
     voice_device_output: str = ""
+    # Phase 10 polish: explicit model paths instead of symlinks + wrappers.
+    # All optional at config-load time; the relevant engine checks them
+    # at runtime and raises a clear EngineNotAvailable with setup advice
+    # if the file is missing.
+    voice_whisper_model_path: str = ""
+    voice_piper_model_path: str = ""
+    voice_piper_config_path: str = ""
+    # auto | paplay | aplay. Picks the playback binary for Piper output.
+    # `auto` prefers paplay (PipeWire / PulseAudio routes Bluetooth output
+    # correctly) and falls back to aplay if paplay isn't installed.
+    voice_tts_playback_command: str = "auto"
 
     # ── Authentication (Phase 8) ──────────────────────────────────────────
     # Auth is OFF by default to preserve the current local-dev workflow.

@@ -92,6 +92,58 @@ Common causes:
 - Recording is silence (try again, speak clearly)
 - Wrong sample rate — RasaPi records at 16000 Hz mono; some USB mics need explicit configuration
 
+### Whisper says "Whisper model not found"
+
+`VOICE_STT_ENGINE=whisper` but `VOICE_WHISPER_MODEL_PATH` is empty or
+points at a file that doesn't exist. As of Phase 10, the adapter
+requires the path to be explicit — **no symlink under
+`backend/models/` is needed any more**.
+
+```bash
+# Verify the path resolves:
+grep ^VOICE_WHISPER_MODEL_PATH ~/rasapi-local-ai-assistant/.env
+
+# Fix:
+sudo nano ~/rasapi-local-ai-assistant/.env
+chmod 600 ~/rasapi-local-ai-assistant/.env
+sudo systemctl restart rasapi
+```
+
+Example value: `/home/<PI_USER>/whisper.cpp/models/ggml-tiny.en.bin`.
+
+### Piper says "Piper model not found"
+
+Same shape as Whisper, but for the TTS side. As of Phase 10, **no
+wrapper script is needed** — RasaPi's adapter passes `--model` itself.
+
+```bash
+grep ^VOICE_PIPER_MODEL_PATH ~/rasapi-local-ai-assistant/.env
+```
+
+Set `VOICE_PIPER_MODEL_PATH=/home/<PI_USER>/piper-voices/en_US-amy-low.onnx`
+(or wherever you put the voice file). The `.onnx.json` config must sit
+beside the `.onnx`. If it can't, set `VOICE_PIPER_CONFIG_PATH` explicitly.
+
+### TTS plays through HDMI / wrong output instead of Bluetooth headset
+
+On Pi distros with PipeWire or PulseAudio (most modern setups), `aplay`
+goes to the wrong card. Switch to `paplay`:
+
+```env
+VOICE_TTS_PLAYBACK_COMMAND=paplay   # or 'auto' which prefers paplay
+```
+
+Make sure paplay is installed:
+
+```bash
+which paplay || sudo apt install pulseaudio-utils
+sudo systemctl restart rasapi
+```
+
+If you'd rather force raw ALSA (e.g. you've intentionally disabled
+PipeWire), use `VOICE_TTS_PLAYBACK_COMMAND=aplay` and set
+`VOICE_DEVICE_OUTPUT` to the right `plughw:X,Y`.
+
 ### Bluetooth headset mic doesn't capture
 
 Bluetooth headsets default to A2DP (high-quality playback, **no mic**).

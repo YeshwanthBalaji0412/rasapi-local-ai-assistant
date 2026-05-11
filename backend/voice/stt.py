@@ -58,14 +58,29 @@ class MockSTT(STTEngine):
 
 
 class WhisperCppSTT(STTEngine):
-    """Wraps the `whisper-cli` binary built from https://github.com/ggerganov/whisper.cpp"""
+    """Wraps the `whisper-cli` binary built from https://github.com/ggerganov/whisper.cpp
+
+    If `VOICE_WHISPER_MODEL_PATH` is set, the model is passed explicitly
+    via `-m`. If empty, the adapter leaves model selection to whisper-cli
+    (which looks under `./models/` by convention). The explicit path is
+    the recommended deployment — it avoids the symlink dance.
+    """
 
     name = "whisper"
 
     def transcribe(self, *, audio_path: Path) -> str:
+        model_path = settings.voice_whisper_model_path.strip()
+        if model_path and not Path(model_path).is_file():
+            raise EngineNotAvailable(
+                "Whisper model not found. Set VOICE_WHISPER_MODEL_PATH in backend/.env "
+                "to a real .bin file (e.g. ~/whisper.cpp/models/ggml-tiny.en.bin)."
+            )
+
         out_prefix = audio_path.with_suffix("")
-        cmd = [
-            "whisper-cli",
+        cmd = ["whisper-cli"]
+        if model_path:
+            cmd += ["-m", model_path]
+        cmd += [
             "-f", str(audio_path),
             "-otxt",
             "-of", str(out_prefix),

@@ -61,3 +61,32 @@ def test_security_model_links_to_hardening_checklist():
 def test_architecture_links_to_final_architecture():
     body = (REPO_ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
     assert "final-architecture.md" in body
+
+
+# ─── Phase 10 polish: docs explain the no-wrapper/no-symlink story ─────────
+
+
+def test_audio_setup_says_no_wrapper_needed():
+    body = (REPO_ROOT / "deployment" / "raspberry-pi" / "audio-setup.md").read_text(
+        encoding="utf-8"
+    )
+    assert "No wrapper script is needed" in body
+    assert "No symlink under" in body
+
+
+def test_troubleshooting_documents_model_path_errors():
+    body = (REPO_ROOT / "docs" / "troubleshooting.md").read_text(encoding="utf-8")
+    assert "VOICE_WHISPER_MODEL_PATH" in body
+    assert "VOICE_PIPER_MODEL_PATH" in body
+    assert "VOICE_TTS_PLAYBACK_COMMAND" in body
+
+
+def test_configuration_documents_new_voice_keys():
+    body = (REPO_ROOT / "docs" / "configuration.md").read_text(encoding="utf-8")
+    for key in (
+        "VOICE_WHISPER_MODEL_PATH",
+        "VOICE_PIPER_MODEL_PATH",
+        "VOICE_PIPER_CONFIG_PATH",
+        "VOICE_TTS_PLAYBACK_COMMAND",
+    ):
+        assert key in body, f"configuration.md missing {key}"
