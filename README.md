@@ -521,8 +521,8 @@ Phase 6 ships a turn-key deployment to a Raspberry Pi. The same backend that run
 # On the Pi (after SSH-ing in):
 git clone https://github.com/YeshwanthBalaji0412/rasapi-local-ai-assistant.git
 cd rasapi-local-ai-assistant
-bash deployment/raspberry-pi/install.sh    # creates venv, installs deps, seeds .env
-chmod 600 .env
+bash deployment/raspberry-pi/install.sh    # creates venv, installs deps, seeds backend/.env
+chmod 600 backend/.env
 
 # Try a manual run first
 cd backend && source .venv/bin/activate
@@ -602,7 +602,7 @@ curl -s -X POST http://localhost:8000/integrations/home-assistant/entities/light
 | Slack | Slack workspace → Apps → Incoming Webhooks → Add to a workspace, copy the webhook URL |
 | Home Assistant | HA → Profile → Long-Lived Access Tokens → Create Token, copy the value (shown only once) |
 
-Then paste each into `.env` under the matching key, set the `ENABLE_*` flag, `chmod 600 .env`, and `sudo systemctl restart rasapi`.
+Then paste each into `backend/.env` under the matching key, set the `ENABLE_*` flag, `chmod 600 backend/.env`, and `sudo systemctl restart rasapi`.
 
 ---
 
@@ -615,15 +615,20 @@ Phase 8 adds **opt-in** API-key + dashboard-login auth so RasaPi is safer to exp
 ```bash
 # 1. Generate a strong secret (32 URL-safe bytes)
 bash deployment/raspberry-pi/generate-secret.sh
-# → paste output as API_SECRET_KEY in .env
+# → paste output as API_SECRET_KEY in backend/.env
 
 # 2. Turn auth on
-sed -i 's/^ENABLE_AUTH=.*/ENABLE_AUTH=true/' .env
-chmod 600 .env
+sed -i 's/^ENABLE_AUTH=.*/ENABLE_AUTH=true/' backend/.env
+chmod 600 backend/.env
 
 # 3. Restart the service (Pi)
 sudo systemctl restart rasapi
 ```
+
+> **The env file lives at `backend/.env`, not the repo root.** Earlier
+> versions of `install.sh` seeded a repo-root `.env` that the service
+> never read; both are now consolidated at `backend/.env` (v0.11.1). If
+> your Pi has both files after an upgrade, delete the repo-root one.
 
 ### API examples
 

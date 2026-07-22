@@ -34,7 +34,25 @@ from config import settings
 from security.audit_log import audit_logger
 
 
-_PLACEHOLDER_KEYS = {"", "change-me-before-use", "replace-with-output-of-generate-secret-sh"}
+# Every string here is treated as "no real secret configured" — the auth
+# dependencies fail closed with 503 rather than validating credentials against
+# a known public string. Kept as a set (not a regex) so the check is exact.
+#
+# Add new placeholders here if a future .env template introduces one. Never
+# remove entries — old Pi deployments may still hold a legacy placeholder in
+# their backend/.env after an upgrade, and continuing to treat those as
+# placeholders is the safe behavior.
+PLACEHOLDER_KEYS: frozenset[str] = frozenset({
+    "",
+    "change-me-before-use",                             # .env.example
+    "replace-with-output-of-generate-secret-sh",        # env.example.pi (current)
+    "replace-with-output-of-openssl-rand-hex-32",       # env.example.pi (legacy)
+    "your-secret-here",                                 # very old drafts
+})
+
+# Kept for backwards compatibility with external readers of the previous
+# private name (e.g. dashboard/service.py).
+_PLACEHOLDER_KEYS = PLACEHOLDER_KEYS
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────

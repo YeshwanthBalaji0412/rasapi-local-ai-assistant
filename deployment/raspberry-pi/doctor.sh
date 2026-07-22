@@ -37,17 +37,45 @@ if [ -d "$REPO_ROOT/backend/backend" ]; then
 fi
 
 # ── 3. .env (presence + perms only, NEVER contents) ─────────────────────────
+# The service reads backend/.env — checked first. If a repo-root .env exists
+# too, flag it: it's ignored by the service and almost always a source of
+# confusion.
 section ".env"
-if [ -f "$REPO_ROOT/.env" ]; then
-  mode=$(stat -c '%a' "$REPO_ROOT/.env" 2>/dev/null || stat -f '%Lp' "$REPO_ROOT/.env" 2>/dev/null || echo "?")
-  size=$(stat -c '%s' "$REPO_ROOT/.env" 2>/dev/null || stat -f '%z' "$REPO_ROOT/.env" 2>/dev/null || echo "?")
-  echo "  present     : yes"
-  echo "  mode        : $mode (should be 600)"
-  echo "  size        : $size bytes"
-  count=$(grep -c '^[A-Z_][A-Z0-9_]*=' "$REPO_ROOT/.env" 2>/dev/null || echo "0")
-  echo "  keys        : $count"
+BACKEND_ENV="$REPO_ROOT/backend/.env"
+LEGACY_ENV="$REPO_ROOT/.env"
+
+if [ -f "$BACKEND_ENV" ]; then
+  mode=$(stat -c '%a' "$BACKEND_ENV" 2>/dev/null || stat -f '%Lp' "$BACKEND_ENV" 2>/dev/null || echo "?")
+  size=$(stat -c '%s' "$BACKEND_ENV" 2>/dev/null || stat -f '%z' "$BACKEND_ENV" 2>/dev/null || echo "?")
+  count=$(grep -c '^[A-Z_][A-Z0-9_]*=' "$BACKEND_ENV" 2>/dev/null || echo "0")
+  echo "  backend/.env: yes  mode=$mode  size=${size}b  keys=$count"
+  # Flag placeholder-only API_SECRET_KEY without printing it.
+  key_line=$(grep '^API_SECRET_KEY=' "$BACKEND_ENV" | head -n 1)
+  case "$key_line" in
+    "API_SECRET_KEY="|\
+    "API_SECRET_KEY=change-me-before-use"|\
+    "API_SECRET_KEY=replace-with-output-of-generate-secret-sh"|\
+    "API_SECRET_KEY=replace-with-output-of-openssl-rand-hex-32")
+      echo "  API_SECRET_KEY: PLACEHOLDER — rotate with: bash deployment/raspberry-pi/generate-secret.sh"
+      ;;
+    "")
+      echo "  API_SECRET_KEY: NOT SET"
+      ;;
+    *)
+      # length only (never the value)
+      val_len=$(( ${#key_line} - 15 ))  # 15 = len('API_SECRET_KEY=')
+      echo "  API_SECRET_KEY: configured (length=$val_len)"
+      ;;
+  esac
 else
-  echo "  present     : NO — copy from deployment/raspberry-pi/env.example.pi"
+  echo "  backend/.env: NO — copy from deployment/raspberry-pi/env.example.pi"
+fi
+
+if [ -f "$LEGACY_ENV" ]; then
+  echo "  WARNING: repo-root .env exists at $LEGACY_ENV"
+  echo "           The service reads backend/.env, NOT this file."
+  echo "           If you configured this file expecting it to work, move it:"
+  echo "             mv \"$LEGACY_ENV\" \"$BACKEND_ENV\""
 fi
 
 # ── 4. port 8000 ────────────────────────────────────────────────────────────

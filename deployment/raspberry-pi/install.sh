@@ -15,7 +15,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/backend"
 DATA_DIR="$BACKEND_DIR/data"
 LOGS_DIR="$REPO_ROOT/logs"
-ENV_FILE="$REPO_ROOT/.env"
+
+# The service reads its config from backend/.env (see backend/config.py — the
+# path is absolute-anchored to this module's directory). Earlier versions of
+# this script seeded .env at the repo root, which the service never read;
+# fresh installs now go straight to the canonical location.
+ENV_FILE="$BACKEND_DIR/.env"
+LEGACY_ENV_FILE="$REPO_ROOT/.env"
 ENV_EXAMPLE="$REPO_ROOT/deployment/raspberry-pi/env.example.pi"
 
 # The exact apt command the user should run if dependencies are missing.
@@ -88,14 +94,27 @@ chmod 700 "$LOGS_DIR" 2>/dev/null || true
 echo "  $DATA_DIR (mode 700)"
 echo "  $LOGS_DIR (mode 700)"
 
-# ── 5. .env seeding (never overwrite) ────────────────────────────────────────
+# ── 5. .env seeding (canonical location = backend/.env) ─────────────────────
 step "Configuring environment file"
+
+# If an earlier install left a .env at the repo root, tell the operator loudly.
+# Do NOT auto-migrate — that could clobber a valid backend/.env or move a file
+# the operator kept intentionally for reference. Just surface it and let them
+# decide.
+if [ -f "$LEGACY_ENV_FILE" ]; then
+  echo "  NOTE: legacy $LEGACY_ENV_FILE exists."
+  echo "  The service reads backend/.env, not the repo-root .env. If you"
+  echo "  configured the repo-root file expecting it to work, move it:"
+  echo "    mv \"$LEGACY_ENV_FILE\" \"$ENV_FILE\""
+  echo "  then re-run this script or restart the service."
+fi
+
 if [ -f "$ENV_FILE" ]; then
   echo "  $ENV_FILE already exists — leaving it untouched."
 else
   if [ -f "$ENV_EXAMPLE" ]; then
     cp "$ENV_EXAMPLE" "$ENV_FILE"
-    echo "  copied env.example.pi → .env"
+    echo "  copied env.example.pi → backend/.env"
   else
     abort "expected $ENV_EXAMPLE but it is missing"
   fi

@@ -42,9 +42,39 @@ sending. Regenerate:
 
 ```bash
 bash deployment/raspberry-pi/generate-secret.sh
-# paste into .env, then:
+# paste into backend/.env, then:
 sudo systemctl restart rasapi
 ```
+
+### 401 that survives multiple key rotations
+
+If you're rotating the key, restarting, and still getting 401 against your
+freshly-generated key — you're almost certainly editing the **wrong** `.env`
+file.
+
+**The service reads `backend/.env`, not the repo-root `.env`.**
+
+Older installs sometimes ended up with a repo-root `.env` (from an earlier
+`install.sh`) sitting alongside a distinct `backend/.env` (created manually or
+by hand-copying an example). Only `backend/.env` matters at runtime.
+
+Check both:
+
+```bash
+ls -la ~/rasapi-local-ai-assistant/.env ~/rasapi-local-ai-assistant/backend/.env
+```
+
+If a repo-root `.env` exists, delete it or move it into `backend/`:
+
+```bash
+# Only run this after confirming backend/.env either doesn't exist or
+# doesn't have anything you want to keep.
+mv ~/rasapi-local-ai-assistant/.env ~/rasapi-local-ai-assistant/backend/.env
+sudo systemctl restart rasapi
+```
+
+`doctor.sh` will surface the same warning if you re-run it after upgrading to
+the fix (v0.11.1 or later).
 
 ### Login doesn't set a cookie
 

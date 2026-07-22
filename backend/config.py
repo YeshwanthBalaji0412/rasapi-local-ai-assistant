@@ -1,9 +1,21 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Canonical .env location: alongside this file, i.e. backend/.env.
+# Using an absolute path here means the service reads the SAME .env
+# regardless of the CWD it was launched from (systemd, uvicorn from repo
+# root, pytest from anywhere). Historically this was ".env" (relative),
+# which silently disagreed with deployment/raspberry-pi/install.sh — that
+# script created .env at the repo root while the service kept reading a
+# non-existent backend/.env, resulting in placeholder secrets slipping
+# through and auth failing in surprising ways.
+_ENV_FILE = Path(__file__).resolve().parent / ".env"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
     )

@@ -241,11 +241,12 @@ def get_llm_summary() -> dict:
 
 def get_auth_summary() -> dict:
     """Auth flags for the dashboard Security card. NEVER includes the secret."""
-    secret_configured = settings.api_secret_key not in {
-        "",
-        "change-me-before-use",
-        "replace-with-output-of-generate-secret-sh",
-    }
+    # Import here rather than at module top to keep security/auth.py an
+    # optional dependency for callers of this module (matches how the rest
+    # of this file scopes its imports).
+    from security.auth import PLACEHOLDER_KEYS
+
+    secret_configured = settings.api_secret_key not in PLACEHOLDER_KEYS
     return {
         "enabled": settings.enable_auth,
         "secret_configured": secret_configured,

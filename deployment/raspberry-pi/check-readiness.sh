@@ -39,8 +39,13 @@ echo "(set RASA_API_KEY=… to exercise auth-protected paths)"
 echo ""
 
 # ── filesystem layout ───────────────────────────────────────────────────────
+# The service reads backend/.env (see backend/config.py). A repo-root .env
+# is a common install artifact but the running service ignores it — flag it.
+BACKEND_ENV="$REPO_ROOT/backend/.env"
+LEGACY_ENV="$REPO_ROOT/.env"
+
 echo "Filesystem"
-[ -f "$REPO_ROOT/.env" ]                && ok ".env present"             || fail ".env present"            "no .env at $REPO_ROOT/.env"
+[ -f "$BACKEND_ENV" ]                   && ok "backend/.env present"     || fail "backend/.env present"    "no .env at $BACKEND_ENV"
 [ -d "$REPO_ROOT/backend/.venv" ]       && ok "backend/.venv present"    || fail "backend/.venv present"   "did you run install.sh?"
 [ -d "$REPO_ROOT/backend/data" ]        && ok "backend/data dir"         || fail "backend/data dir"        "missing"
 [ -d "$REPO_ROOT/logs" ]                && ok "logs/ dir"                || fail "logs/ dir"               "missing"
@@ -52,13 +57,20 @@ else
   ok "no accidental backend/backend nesting"
 fi
 
-# .env should not be world-readable.
-if [ -f "$REPO_ROOT/.env" ]; then
-  mode=$(stat -c '%a' "$REPO_ROOT/.env" 2>/dev/null || stat -f '%Lp' "$REPO_ROOT/.env" 2>/dev/null || echo "")
+# Legacy repo-root .env — silently ignored by the service, flag it.
+if [ -f "$LEGACY_ENV" ]; then
+  fail "no legacy repo-root .env" "found $LEGACY_ENV — the service reads backend/.env; move or delete this file"
+else
+  ok "no legacy repo-root .env"
+fi
+
+# backend/.env should not be world-readable.
+if [ -f "$BACKEND_ENV" ]; then
+  mode=$(stat -c '%a' "$BACKEND_ENV" 2>/dev/null || stat -f '%Lp' "$BACKEND_ENV" 2>/dev/null || echo "")
   if [ "$mode" = "600" ]; then
-    ok ".env mode is 600"
+    ok "backend/.env mode is 600"
   else
-    fail ".env mode is 600" "current mode: ${mode:-unknown}"
+    fail "backend/.env mode is 600" "current mode: ${mode:-unknown}"
   fi
 fi
 

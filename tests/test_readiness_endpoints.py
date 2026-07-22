@@ -33,7 +33,7 @@ def test_version_endpoint_public(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["name"] == "RasaPi"
-    assert body["version"] == "0.11.0"
+    assert body["version"] == "0.11.1"
 
 
 def test_version_remains_public_when_auth_on(client, auth_on):
@@ -50,7 +50,7 @@ def test_readiness_endpoint_public(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["ready"] is True
-    assert body["version"] == "0.11.0"
+    assert body["version"] == "0.11.1"
     assert "checks" in body
     assert "database_dir" in body["checks"]
 
@@ -75,7 +75,7 @@ def test_config_status_public_when_auth_off(client):
     resp = client.get("/config/status")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["version"] == "0.11.0"
+    assert body["version"] == "0.11.1"
     assert "features" in body
     assert "auth" in body
     assert body["auth"]["enabled"] is False

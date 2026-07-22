@@ -24,7 +24,7 @@ from security import auth as auth_module
 router = APIRouter(tags=["readiness"])
 
 
-_VERSION = "0.11.0"
+_VERSION = "0.11.1"
 _NAME = "RasaPi"
 
 
@@ -100,12 +100,7 @@ def _safe_feature_flags() -> dict:
         },
         "auth": {
             "enabled": bool(settings.enable_auth),
-            "secret_configured": settings.api_secret_key
-            not in {
-                "",
-                "change-me-before-use",
-                "replace-with-output-of-generate-secret-sh",
-            },
+            "secret_configured": settings.api_secret_key not in auth_module.PLACEHOLDER_KEYS,
             "protect_ask": bool(settings.auth_protect_ask),
             "protect_voice": bool(settings.auth_protect_voice),
             "protect_mutations": bool(settings.auth_protect_mutations),

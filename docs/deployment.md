@@ -39,7 +39,7 @@ local-network service.
    │     → pip install -r backend/requirements.txt           │
    │     → backend/data/  (mode 700)                         │
    │     → logs/          (mode 700)                         │
-   │     → .env (chmod 600 by user, never overwritten)       │
+   │     → backend/.env (chmod 600 by user, never overwritten)│
    │                                                         │
    │   systemd ──► uvicorn main:app  (User=<PI_USER>)        │
    │                  ├── default: 127.0.0.1:8000 (Pi-only) │
@@ -66,10 +66,19 @@ deferred — see [`docs/roadmap.md`](roadmap.md).
 
 > **Phase 8 update.** Authentication is now available as an opt-in feature.
 > Generate a secret with `bash deployment/raspberry-pi/generate-secret.sh`,
-> set `ENABLE_AUTH=true` in `.env`, and follow
+> set `ENABLE_AUTH=true` in `backend/.env`, and follow
 > [`deployment/raspberry-pi/remote-access.md`](../deployment/raspberry-pi/remote-access.md)
 > for safe LAN/Tailscale exposure. Public-internet port forwarding remains a
 > hard "no" regardless of auth state.
+>
+> **v0.11.1 note.** The canonical env file is **`backend/.env`**, not the
+> repo-root `.env`. Earlier versions of `install.sh` seeded a repo-root file
+> that the service never read; `install.sh` now writes directly to
+> `backend/.env`, and `doctor.sh` / `check-readiness.sh` will warn if a
+> stale repo-root `.env` is present. If you upgraded from an earlier version
+> and auth silently isn't working, that's why — see
+> [`troubleshooting.md`](troubleshooting.md) → *401 that survives multiple
+> key rotations*.
 
 ## Files shipped in `deployment/raspberry-pi/`
 

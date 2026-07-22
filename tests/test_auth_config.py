@@ -29,12 +29,21 @@ def test_session_defaults():
 
 def test_default_secret_is_placeholder():
     """The shipped default must NOT look like a real secret."""
-    assert settings.api_secret_key in {
+    assert settings.api_secret_key in auth_module.PLACEHOLDER_KEYS
+    assert auth_module._is_secret_configured() is False
+
+
+def test_placeholder_set_covers_historical_variants():
+    """Every placeholder string that has ever shipped in an env template must
+    still be recognized. Removing entries here could silently accept a public
+    string as a real secret after an upgrade."""
+    required = {
         "",
         "change-me-before-use",
         "replace-with-output-of-generate-secret-sh",
+        "replace-with-output-of-openssl-rand-hex-32",
     }
-    assert auth_module._is_secret_configured() is False
+    assert required.issubset(auth_module.PLACEHOLDER_KEYS)
 
 
 def test_auth_module_uses_compare_digest():
