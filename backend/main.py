@@ -10,6 +10,7 @@ from api.routes import (
     auth,
     briefing,
     dashboard,
+    data,
     health,
     integrations,
     memory,
@@ -58,3 +59,4 @@ app.include_router(voice.router)
 app.include_router(auth.router)
 app.include_router(integrations.router)
 app.include_router(readiness.router)
+app.include_router(data.router)

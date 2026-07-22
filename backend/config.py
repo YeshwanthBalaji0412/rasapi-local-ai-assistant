@@ -128,6 +128,16 @@ class Settings(BaseSettings):
     watchdog_disk_threshold_pct: int = 90
     watchdog_slack_on_alert: bool = False
 
+    # ── Phase 12: Data expansion layer ────────────────────────────────────
+    # Read-only cache-backed public data sources. See backend/data_sources/.
+    # Each source gates on its own config; these are the shared framework
+    # knobs (cache, timeout, refresh loop).
+    data_cache_enabled: bool = True
+    data_stale_fallback: bool = True
+    data_memory_cache_max_entries: int = 500
+    data_fetch_timeout_seconds: int = 10
+    data_background_refresh_enabled: bool = True
+
     api_secret_key: str = "change-me-before-use"
 
     database_path: str = "backend/data/rasapi.db"

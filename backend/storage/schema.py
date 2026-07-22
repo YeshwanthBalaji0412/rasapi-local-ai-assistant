@@ -67,6 +67,24 @@ CREATE TABLE IF NOT EXISTS briefing_runs (
 )
 """
 
+# ── Phase 12: /data/* two-layer cache ────────────────────────────────────────
+# Every /data/* source writes its response envelope's payload here. Rows are
+# addressable by (source, key) — e.g. ("weather_world", "boston"). The memory
+# cache in data_sources.cache is authoritative during a process's lifetime;
+# this table exists so the cache survives restarts and so stale rows can be
+# served on upstream failure. Never populated by anything other than the
+# data-source cache layer.
+DATA_CACHE_TABLE = """
+CREATE TABLE IF NOT EXISTS data_cache (
+    source        TEXT NOT NULL,
+    key           TEXT NOT NULL,
+    payload_json  TEXT NOT NULL,
+    fetched_at    TEXT NOT NULL,
+    expires_at    TEXT NOT NULL,
+    PRIMARY KEY (source, key)
+)
+"""
+
 INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
     "CREATE INDEX IF NOT EXISTS idx_memory_archived ON memory_items(archived)",
@@ -74,6 +92,7 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_briefing_items_category ON briefing_items(category)",
     "CREATE INDEX IF NOT EXISTS idx_briefing_items_fetched_at ON briefing_items(fetched_at)",
     "CREATE INDEX IF NOT EXISTS idx_briefing_items_source ON briefing_items(source_name)",
+    "CREATE INDEX IF NOT EXISTS idx_data_cache_expires ON data_cache(expires_at)",
 ]
 
 ALL_STATEMENTS = [
@@ -82,5 +101,6 @@ ALL_STATEMENTS = [
     MEMORY_TABLE,
     BRIEFING_ITEMS_TABLE,
     BRIEFING_RUNS_TABLE,
+    DATA_CACHE_TABLE,
     *INDEXES,
 ]
