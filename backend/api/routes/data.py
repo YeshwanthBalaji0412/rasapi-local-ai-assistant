@@ -1,20 +1,21 @@
 """
 Phase 12 — /data/* routes.
 
-  GET /data/sources           → list every registered DataSource + its health.
-                                Reads the module-level SourceRegistry; makes
-                                no upstream calls itself.
+  GET /data/sources               → list every registered DataSource + health.
+  GET /data/{source_name}         → fetch data with the source's default key.
+  GET /data/{source_name}/{key}   → fetch data for the given key.
 
-Later gates mount per-source endpoints (weather, market, news, ...). This
-file stays the single mount point for the /data/* prefix.
+The registry is consulted at request time; unknown names return 404. The
+same envelope shape is returned by every source, so the UI can render
+`data`, `warnings`, and staleness uniformly.
 
-Auth posture: gated by `require_auth_for_ask` — same policy as /ask. If a
-future need arises for a distinct AUTH_PROTECT_DATA flag, add it in
-backend/config.py and swap the dependency here. Not warranted at Gate 1.
+Auth posture: gated by `require_auth_for_ask` — same policy as /ask. A
+dedicated AUTH_PROTECT_DATA flag can be added if the operator needs
+differentiated posture later.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from data_sources.registry import get_registry
 from security import auth as auth_module
@@ -33,3 +34,30 @@ async def list_sources() -> dict:
         "sources": [h.to_dict() for h in registry.all_health()],
         "count": len(registry.names()),
     }
+
+
+@router.get(
+    "/{source_name}",
+    dependencies=[Depends(auth_module.require_auth_for_ask)],
+)
+async def fetch_default(source_name: str) -> dict:
+    return await _fetch(source_name, "")
+
+
+@router.get(
+    "/{source_name}/{key:path}",
+    dependencies=[Depends(auth_module.require_auth_for_ask)],
+)
+async def fetch_keyed(source_name: str, key: str) -> dict:
+    return await _fetch(source_name, key)
+
+
+async def _fetch(source_name: str, key: str) -> dict:
+    registry = get_registry()
+    source = registry.get(source_name)
+    if source is None:
+        raise HTTPException(status_code=404, detail=f"unknown source: {source_name!r}")
+
+    envelope = await source.fetch(key)
+    registry.record_fetch(source_name, ok=envelope.data is not None)
+    return envelope.to_dict()

@@ -33,6 +33,16 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting %s on %s:%s", settings.assistant_name, settings.host, settings.port)
     init_db()
+
+    # Phase 12: register every DataSource with the singleton registry so
+    # GET /data/sources reflects them. Registration is idempotent — running
+    # this at every startup is safe and cheap.
+    try:
+        from data_sources.sources import register_all_sources
+        register_all_sources()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("data_sources.register_all_sources() failed: %s", e)
+
     yield
     logger.info("Shutting down %s", settings.assistant_name)
 
