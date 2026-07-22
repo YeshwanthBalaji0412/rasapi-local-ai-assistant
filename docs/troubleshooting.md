@@ -46,6 +46,56 @@ bash deployment/raspberry-pi/generate-secret.sh
 sudo systemctl restart rasapi
 ```
 
+### `backend/backend/` directory exists on the Pi
+
+You upgraded from a pre-v0.11.2 install. Older versions had the same class
+of bug as the `.env` path issue: `database_path`, `voice_audio_temp_dir`,
+and `audit_log_dir` defaulted to relative paths (like `backend/data/rasapi.db`),
+and systemd's `WorkingDirectory=backend/` silently doubled the `backend/`
+prefix — so the service wrote to `backend/backend/data/rasapi.db` while every
+operator tool assumed `backend/data/`.
+
+v0.11.2 fixes the root cause: those paths now anchor to the repo root
+regardless of CWD. But old data may still be sitting at the nested location.
+
+Diagnose:
+
+```bash
+bash deployment/raspberry-pi/doctor.sh
+```
+
+The `.env` section (or the `Repo layout` section on newer builds) will list
+every legacy file with its size and print the exact migration commands.
+
+The migration is a stop → move → start:
+
+```bash
+sudo systemctl stop rasapi
+mkdir -p ~/rasapi-local-ai-assistant/backend/data ~/rasapi-local-ai-assistant/logs
+
+# Move the DB into the canonical location (skip if empty)
+[ -s ~/rasapi-local-ai-assistant/backend/backend/data/rasapi.db ] && \
+  mv ~/rasapi-local-ai-assistant/backend/backend/data/rasapi.db \
+     ~/rasapi-local-ai-assistant/backend/data/rasapi.db
+
+# Migrate audit logs and temp audio
+[ -d ~/rasapi-local-ai-assistant/backend/backend/logs ] && \
+  cp -r ~/rasapi-local-ai-assistant/backend/backend/logs/. \
+        ~/rasapi-local-ai-assistant/logs/
+[ -d ~/rasapi-local-ai-assistant/backend/backend/data/audio_tmp ] && \
+  cp -r ~/rasapi-local-ai-assistant/backend/backend/data/audio_tmp/. \
+        ~/rasapi-local-ai-assistant/backend/data/audio_tmp/
+
+# Remove the nested directory
+rm -rf ~/rasapi-local-ai-assistant/backend/backend
+
+sudo systemctl start rasapi
+```
+
+Verify: run `doctor.sh` again — the "LEGACY PATH NESTING DETECTED" block
+should be gone, and `check-readiness.sh` should print
+"no legacy backend/backend/ nesting: ok".
+
 ### 401 that survives multiple key rotations
 
 If you're rotating the key, restarting, and still getting 401 against your

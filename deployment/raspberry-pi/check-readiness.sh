@@ -50,11 +50,16 @@ echo "Filesystem"
 [ -d "$REPO_ROOT/backend/data" ]        && ok "backend/data dir"         || fail "backend/data dir"        "missing"
 [ -d "$REPO_ROOT/logs" ]                && ok "logs/ dir"                || fail "logs/ dir"               "missing"
 
-# Detect the accidental backend/backend/ nesting bug.
+# Detect the pre-v0.11.2 backend/backend/ nesting artifact. When the systemd
+# service ran with CWD=backend/, relative default paths that already started
+# with "backend/" doubled up. v0.11.2 anchors those paths to the repo root
+# so the nesting can't happen for new writes — but old writes may still be
+# sitting on disk. Run `bash deployment/raspberry-pi/doctor.sh` for the
+# migration steps.
 if [ -d "$REPO_ROOT/backend/backend" ]; then
-  fail "no accidental backend/backend nesting" "found $REPO_ROOT/backend/backend — check DATABASE_PATH and VOICE_AUDIO_TEMP_DIR"
+  fail "no legacy backend/backend/ nesting" "found $REPO_ROOT/backend/backend — legacy data from pre-v0.11.2; run doctor.sh for migration steps"
 else
-  ok "no accidental backend/backend nesting"
+  ok "no legacy backend/backend/ nesting"
 fi
 
 # Legacy repo-root .env — silently ignored by the service, flag it.

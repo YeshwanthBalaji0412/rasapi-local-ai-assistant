@@ -24,7 +24,7 @@ from security import auth as auth_module
 router = APIRouter(tags=["readiness"])
 
 
-_VERSION = "0.11.1"
+_VERSION = "0.11.2"
 _NAME = "RasaPi"
 
 

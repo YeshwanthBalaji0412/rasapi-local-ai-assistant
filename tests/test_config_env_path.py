@@ -21,8 +21,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic_settings import SettingsConfigDict
-
 from config import Settings
 
 
@@ -56,3 +54,57 @@ def test_env_file_model_config_uses_settings_config_dict():
     # against dict, so also check the well-known keys are present.
     for key in ("env_file", "env_file_encoding", "case_sensitive"):
         assert key in Settings.model_config, f"missing model_config key: {key}"
+
+
+# ── Path-typed settings must resolve to the repo root, NOT the CWD ─────
+#
+# The same class of bug that produced backend/.env-vs-repo-root/.env also
+# produced backend/backend/data/rasapi.db (systemd CWD=backend/, and the
+# default database_path was the relative string "backend/data/rasapi.db",
+# so pydantic-settings didn't rewrite it and Python resolved it against
+# CWD, doubling the "backend/" prefix). The field_validator in config.py
+# now anchors these paths to the repo root. Lock the invariant here.
+
+
+def test_database_path_default_resolves_under_repo_root():
+    """A fresh Settings() with the shipped default should resolve
+    database_path to <repo>/backend/data/rasapi.db — never
+    <repo>/backend/backend/data/rasapi.db."""
+    repo_root = Path(__file__).resolve().parent.parent
+    settings = Settings()
+    db_path = Path(settings.database_path)
+    assert db_path.is_absolute(), (
+        f"database_path must resolve to an absolute path, got: {db_path!r}"
+    )
+    assert db_path == repo_root / "backend" / "data" / "rasapi.db", (
+        f"database_path resolved to {db_path!r}; "
+        f"expected {repo_root / 'backend' / 'data' / 'rasapi.db'!r}. "
+        f"If you see backend/backend/data/... the CWD-nesting bug is back."
+    )
+
+
+def test_audit_log_dir_default_resolves_under_repo_root():
+    repo_root = Path(__file__).resolve().parent.parent
+    settings = Settings()
+    audit_dir = Path(settings.audit_log_dir)
+    assert audit_dir.is_absolute()
+    assert audit_dir == repo_root / "logs"
+
+
+def test_voice_audio_temp_dir_default_resolves_under_repo_root():
+    repo_root = Path(__file__).resolve().parent.parent
+    settings = Settings()
+    audio_dir = Path(settings.voice_audio_temp_dir)
+    assert audio_dir.is_absolute()
+    assert audio_dir == repo_root / "backend" / "data" / "audio_tmp"
+
+
+def test_absolute_path_settings_pass_through_unchanged():
+    """Operators who pin a path to somewhere outside the repo (SD card mount,
+    tmpfs, etc.) must not have it silently rewritten. Absolute paths bypass
+    the validator's anchoring."""
+    import os
+
+    external = os.path.abspath("/var/lib/rasapi/rasapi.db")
+    s = Settings(database_path=external)
+    assert s.database_path == external

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Canonical .env location: alongside this file, i.e. backend/.env.
@@ -12,6 +13,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # through and auth failing in surprising ways.
 _ENV_FILE = Path(__file__).resolve().parent / ".env"
 
+# The repo root — parent of the backend/ folder that houses this module.
+# Path-typed settings whose defaults start with "backend/" or "logs/"
+# assume they're resolved relative to this location, NOT relative to
+# whatever CWD systemd (or uvicorn, or pytest) happens to launch under.
+# The `_resolve_repo_relative` validator below enforces that.
+#
+# History: this used to be broken. `database_path` defaulted to
+# "backend/data/rasapi.db", systemd set WorkingDirectory=backend/, so the
+# path silently doubled to backend/backend/data/rasapi.db. Meanwhile every
+# operator tool assumed backend/data/. check-readiness.sh even had a
+# "no accidental backend/backend nesting" check — a symptom, not a fix.
+# Anchoring to _REPO_ROOT here is the fix.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -19,6 +34,24 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
+
+    @field_validator(
+        "database_path",
+        "voice_audio_temp_dir",
+        "audit_log_dir",
+        mode="after",
+    )
+    @classmethod
+    def _resolve_repo_relative(cls, v: str) -> str:
+        """Anchor filesystem-path settings to the repo root when they're
+        relative. Absolute paths (as set in tests via monkeypatch, or by
+        operators who pin data elsewhere) pass through unchanged."""
+        if not v:
+            return v
+        p = Path(v)
+        if p.is_absolute():
+            return str(p)
+        return str(_REPO_ROOT / p)
 
     host: str = "0.0.0.0"
     port: int = 8000

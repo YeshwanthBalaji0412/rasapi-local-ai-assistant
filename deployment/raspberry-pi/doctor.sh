@@ -33,7 +33,39 @@ echo "  root        : $REPO_ROOT"
 [ -d "$REPO_ROOT/backend/data" ]         && echo "  backend/data: OK"          || echo "  backend/data: MISSING"
 [ -d "$REPO_ROOT/logs" ]                 && echo "  logs/       : OK"          || echo "  logs/       : MISSING"
 if [ -d "$REPO_ROOT/backend/backend" ]; then
-  echo "  WARNING: backend/backend exists — likely an .env path bug; check DATABASE_PATH and VOICE_AUDIO_TEMP_DIR"
+  echo ""
+  echo "  ── LEGACY PATH NESTING DETECTED (pre-v0.11.2 bug) ────────────"
+  echo "  backend/backend/ exists. Older RasaPi versions set the systemd"
+  echo "  service CWD to backend/ but had relative default paths that"
+  echo "  started with 'backend/', silently doubling the prefix. Any DB,"
+  echo "  audit log, or temp audio at backend/backend/... belongs at"
+  echo "  backend/... — the running service now resolves paths from the"
+  echo "  repo root."
+  echo ""
+  echo "  Sizes:"
+  for legacy in \
+    "$REPO_ROOT/backend/backend/data/rasapi.db" \
+    "$REPO_ROOT/backend/backend/data/audio_tmp" \
+    "$REPO_ROOT/backend/backend/logs"
+  do
+    if [ -e "$legacy" ]; then
+      size=$(du -sh "$legacy" 2>/dev/null | cut -f1)
+      echo "    $legacy  ($size)"
+    fi
+  done
+  echo ""
+  echo "  Migration (run BEFORE restarting the service):"
+  echo "    sudo systemctl stop rasapi"
+  echo "    mkdir -p $REPO_ROOT/backend/data $REPO_ROOT/logs"
+  echo "    # Move the nested files into place (destination should be empty)"
+  echo "    [ -s $REPO_ROOT/backend/backend/data/rasapi.db ] && \\"
+  echo "      mv $REPO_ROOT/backend/backend/data/rasapi.db $REPO_ROOT/backend/data/rasapi.db"
+  echo "    [ -d $REPO_ROOT/backend/backend/data/audio_tmp ] && \\"
+  echo "      cp -r $REPO_ROOT/backend/backend/data/audio_tmp/. $REPO_ROOT/backend/data/audio_tmp/"
+  echo "    [ -d $REPO_ROOT/backend/backend/logs ] && \\"
+  echo "      cp -r $REPO_ROOT/backend/backend/logs/. $REPO_ROOT/logs/"
+  echo "    rm -rf $REPO_ROOT/backend/backend"
+  echo "    sudo systemctl start rasapi"
 fi
 
 # ── 3. .env (presence + perms only, NEVER contents) ─────────────────────────

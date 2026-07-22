@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.assistant_name,
     description="Local-first secure AI assistant on Raspberry Pi 5",
-    version="0.11.1",
+    version="0.11.2",
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url=None,
